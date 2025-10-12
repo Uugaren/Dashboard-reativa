@@ -36,12 +36,16 @@ window.initDashboardLogic = function() {
   // Função para mostrar alertas
   function showAlert(message, type = 'success') {
     const alert = document.createElement('div');
-    alert.className = `alert px-4 py-3 rounded-lg mb-3 text-sm font-medium animate-fade-in ${
+    const iconSvg = type === 'success' 
+      ? '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+      : '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+    
+    alert.className = `alert px-5 py-4 rounded-xl mb-3 text-sm font-semibold animate-fade-in flex items-center gap-3 border shadow-lg ${
       type === 'success' 
-        ? 'bg-green-600 text-white' 
-        : 'bg-red-600 text-white'
+        ? 'bg-green-500/10 text-green-400 border-green-500/20' 
+        : 'bg-red-500/10 text-red-400 border-red-500/20'
     }`;
-    alert.textContent = message;
+    alert.innerHTML = `${iconSvg}<span>${message}</span>`;
     alertContainer.appendChild(alert);
     
     setTimeout(() => {
@@ -63,10 +67,10 @@ window.initDashboardLogic = function() {
     }
 
     try {
-      connectBtn.textContent = 'Conectando...';
+      connectBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Conectando...';
       connectBtn.disabled = true;
-      connectionStatus.textContent = 'Conectando...';
-      connectionStatus.className = 'connection-status px-4 py-2 rounded-lg text-xs font-medium bg-yellow-600 text-white animate-pulse-glow';
+      connectionStatus.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Conectando...';
+      connectionStatus.className = 'connection-status px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 animate-pulse-glow';
 
       supabase = window.supabase.createClient(url, key);
       
@@ -75,9 +79,9 @@ window.initDashboardLogic = function() {
       if (error) throw error;
 
       isConnected = true;
-      connectionStatus.textContent = '✓ Conectado';
-      connectionStatus.className = 'connection-status px-4 py-2 rounded-lg text-xs font-medium bg-green-600 text-white';
-      connectBtn.textContent = 'Conectar';
+      connectionStatus.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Conectado';
+      connectionStatus.className = 'connection-status px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 bg-green-500/10 text-green-400 border border-green-500/20';
+      connectBtn.innerHTML = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>Conectar';
       connectBtn.disabled = false;
       showAlert('Conectado ao Supabase com sucesso!', 'success');
       
@@ -85,9 +89,9 @@ window.initDashboardLogic = function() {
       await loadMetrics();
     } catch (error) {
       isConnected = false;
-      connectionStatus.textContent = '✗ Erro';
-      connectionStatus.className = 'connection-status px-4 py-2 rounded-lg text-xs font-medium bg-red-600 text-white';
-      connectBtn.textContent = 'Conectar';
+      connectionStatus.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>Erro';
+      connectionStatus.className = 'connection-status px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 bg-red-500/10 text-red-400 border border-red-500/20';
+      connectBtn.innerHTML = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>Conectar';
       connectBtn.disabled = false;
       showAlert('Erro ao conectar: ' + error.message, 'error');
     }
@@ -156,13 +160,17 @@ window.initDashboardLogic = function() {
 
     if (clientsToShow.length === 0) {
       clientsList.innerHTML = `
-        <div class="empty-state text-center py-12">
-          <div class="empty-icon text-6xl mb-4 opacity-20">👥</div>
-          <div class="empty-title text-muted-foreground text-base mb-2">
+        <div class="empty-state text-center py-16">
+          <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-muted/30 flex items-center justify-center">
+            <svg class="w-10 h-10 text-muted-foreground/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+          </div>
+          <div class="empty-title text-muted-foreground text-lg font-semibold mb-2">
             ${searchTerm ? 'Nenhum cliente encontrado' : 'Nenhum cliente cadastrado'}
           </div>
           <div class="empty-subtitle text-muted-foreground text-sm">
-            ${searchTerm ? 'Tente buscar com outros termos' : 'Comece adicionando um novo cliente'}
+            ${searchTerm ? 'Tente buscar com outros termos' : 'Conecte-se ao Supabase e comece adicionando clientes'}
           </div>
         </div>
       `;
@@ -170,23 +178,75 @@ window.initDashboardLogic = function() {
       return;
     }
 
-    clientsList.innerHTML = clientsToShow.map(client => `
-      <div class="client-item bg-input border border-border rounded-lg p-4 mb-3 relative hover:border-primary/50 transition-all duration-300 animate-fade-in">
-        <div class="client-actions absolute top-4 right-4 flex gap-2">
-          <button 
-            class="btn-delete px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-md text-xs font-medium transition-all" 
-            onclick="openDeleteModal('${client.id}', '${client.nome_completo}')"
-          >
-            Excluir
-          </button>
-        </div>
-        <div class="client-name text-primary font-semibold text-base mb-2">${highlightText(client.nome_completo)}</div>
-        <div class="client-info text-muted-foreground text-sm mb-1">✉️ ${highlightText(client.email)}</div>
-        <div class="client-info text-muted-foreground text-sm mb-1">📞 ${highlightText(client.telefone)}</div>
-        ${client.endereco ? `<div class="client-info text-muted-foreground text-sm mb-1">📍 ${highlightText(client.endereco)}</div>` : ''}
-        <div class="client-stats flex gap-4 mt-3 pt-3 border-t border-border text-xs text-muted-foreground">
-          <span>🎂 ${client.data_aniversario || 'Não informado'}</span>
-          <span>📅 Cadastro: ${new Date(client.created_at).toLocaleDateString('pt-BR')}</span>
+    clientsList.innerHTML = clientsToShow.map((client, index) => `
+      <div class="client-item glass rounded-xl p-5 mb-4 relative hover:border-primary/30 transition-all duration-300 animate-fade-in group hover-lift" style="animation-delay: ${index * 0.05}s">
+        <div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        <div class="relative">
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-lg text-primary">
+                ${client.nome_completo.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div class="client-name text-foreground font-bold text-lg mb-1">${highlightText(client.nome_completo)}</div>
+                <div class="flex items-center gap-2">
+                  <span class="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-semibold">
+                    ${client.ativo ? 'Ativo' : 'Inativo'}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button 
+              class="btn-delete px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-destructive/20" 
+              onclick="openDeleteModal('${client.id}', '${client.nome_completo}')"
+            >
+              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+              Excluir
+            </button>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            <div class="flex items-center gap-2 text-sm text-muted-foreground">
+              <svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+              <span class="truncate">${highlightText(client.email)}</span>
+            </div>
+            <div class="flex items-center gap-2 text-sm text-muted-foreground">
+              <svg class="w-4 h-4 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+              </svg>
+              <span>${highlightText(client.telefone)}</span>
+            </div>
+            ${client.endereco ? `
+              <div class="flex items-center gap-2 text-sm text-muted-foreground md:col-span-2">
+                <svg class="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <span class="truncate">${highlightText(client.endereco)}</span>
+              </div>
+            ` : ''}
+          </div>
+          
+          <div class="flex items-center justify-between pt-4 border-t border-border/50">
+            <div class="flex items-center gap-4 text-xs text-muted-foreground">
+              <div class="flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>
+                </svg>
+                <span>${client.data_aniversario ? new Date(client.data_aniversario + 'T00:00:00').toLocaleDateString('pt-BR') : 'Não informado'}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <span>Desde ${new Date(client.created_at).toLocaleDateString('pt-BR')}</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     `).join('');
@@ -218,11 +278,14 @@ window.initDashboardLogic = function() {
 
     let controls = `
       <button 
-        class="btn-page px-3 py-2 rounded-md text-xs font-medium transition-all ${currentPage === 1 ? 'bg-muted text-muted-foreground cursor-not-allowed' : 'bg-card text-foreground hover:bg-primary hover:text-primary-foreground'}" 
+        class="btn-page px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 ${currentPage === 1 ? 'bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50' : 'bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20'}" 
         onclick="goToPage(${currentPage - 1})" 
         ${currentPage === 1 ? 'disabled' : ''}
       >
-        ← Anterior
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+        Anterior
       </button>
     `;
 
@@ -230,24 +293,27 @@ window.initDashboardLogic = function() {
       if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) {
         controls += `
           <button 
-            class="btn-page px-3 py-2 rounded-md text-xs font-medium transition-all ${i === currentPage ? 'bg-primary text-primary-foreground' : 'bg-card text-foreground hover:bg-primary/80 hover:text-primary-foreground'}" 
+            class="btn-page px-4 py-2 rounded-lg text-xs font-bold transition-all ${i === currentPage ? 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-primary' : 'bg-muted/50 text-foreground hover:bg-primary/10 hover:text-primary border border-border'}" 
             onclick="goToPage(${i})"
           >
             ${i}
           </button>
         `;
       } else if (i === currentPage - 2 || i === currentPage + 2) {
-        controls += '<span class="px-2 text-muted-foreground">...</span>';
+        controls += '<span class="px-2 text-muted-foreground text-sm">...</span>';
       }
     }
 
     controls += `
       <button 
-        class="btn-page px-3 py-2 rounded-md text-xs font-medium transition-all ${currentPage === totalPages ? 'bg-muted text-muted-foreground cursor-not-allowed' : 'bg-card text-foreground hover:bg-primary hover:text-primary-foreground'}" 
+        class="btn-page px-4 py-2 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 ${currentPage === totalPages ? 'bg-muted/50 text-muted-foreground cursor-not-allowed opacity-50' : 'bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border border-primary/20'}" 
         onclick="goToPage(${currentPage + 1})" 
         ${currentPage === totalPages ? 'disabled' : ''}
       >
-        Próxima →
+        Próxima
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+        </svg>
       </button>
     `;
 
@@ -444,10 +510,21 @@ window.initDashboardLogic = function() {
       if (data.length === 0) {
         clientDropdown.innerHTML = '<div class="no-clients-found p-3 text-muted-foreground text-xs text-center italic">Nenhum cliente encontrado</div>';
       } else {
-        clientDropdown.innerHTML = data.map(client => `
-          <div class="client-option p-3 cursor-pointer border-b border-border hover:bg-primary/10 transition-colors" onclick="selectClient('${client.id}', '${client.nome_completo}', '${client.email}', '${client.telefone}')">
-            <div class="client-option-name text-foreground font-medium mb-1">${client.nome_completo}</div>
-            <div class="client-option-details text-muted-foreground text-xs">${client.email} • ${client.telefone}</div>
+        clientDropdown.innerHTML = data.map((client, index) => `
+          <div class="client-option p-4 cursor-pointer border-b border-border last:border-0 hover:bg-gradient-to-r hover:from-primary/10 hover:to-accent/5 transition-all group" onclick="selectClient('${client.id}', '${client.nome_completo}', '${client.email}', '${client.telefone}')">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-sm text-primary group-hover:scale-110 transition-transform">
+                ${client.nome_completo.charAt(0).toUpperCase()}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="client-option-name text-foreground font-semibold mb-0.5 truncate">${client.nome_completo}</div>
+                <div class="client-option-details text-muted-foreground text-xs flex items-center gap-2">
+                  <span class="truncate">${client.email}</span>
+                  <span class="text-border">•</span>
+                  <span>${client.telefone}</span>
+                </div>
+              </div>
+            </div>
           </div>
         `).join('');
       }
