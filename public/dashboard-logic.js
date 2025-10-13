@@ -156,7 +156,10 @@ window.initDashboardLogic = function() {
     const end = start + itemsPerPage;
     const clientsToShow = filteredClients.slice(start, end);
 
-    document.getElementById('clientCount').textContent = filteredClients.length;
+    const clientCountEl = document.getElementById('clientCount');
+    if (clientCountEl) {
+      clientCountEl.textContent = filteredClients.length;
+    }
 
     if (clientsToShow.length === 0) {
       clientsList.innerHTML = `
@@ -174,38 +177,42 @@ window.initDashboardLogic = function() {
           </div>
         </div>
       `;
-      document.getElementById('paginationContainer').style.display = 'none';
+      const paginationContainer = document.getElementById('paginationContainer');
+      if (paginationContainer) {
+        paginationContainer.style.display = 'none';
+      }
       return;
     }
 
     clientsList.innerHTML = clientsToShow.map((client, index) => `
-      <div class="client-item glass rounded-xl p-5 mb-4 relative hover:border-primary/30 transition-all duration-300 animate-fade-in group hover-lift" style="animation-delay: ${index * 0.05}s">
-        <div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-        <div class="relative">
-          <div class="flex items-start justify-between mb-4">
-            <div class="flex items-center gap-3">
-              <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-lg text-primary">
-                ${client.nome_completo.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <div class="client-name text-foreground font-bold text-lg mb-1">${highlightText(client.nome_completo)}</div>
-                <div class="flex items-center gap-2">
-                  <span class="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-semibold">
-                    ${client.ativo ? 'Ativo' : 'Inativo'}
-                  </span>
+      <a href="/perfil?id=${client.id}" class="block">
+        <div class="client-item glass rounded-xl p-5 mb-4 relative hover:border-primary/30 transition-all duration-300 animate-fade-in group hover-lift cursor-pointer" style="animation-delay: ${index * 0.05}s">
+          <div class="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+          <div class="relative">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-lg text-primary">
+                  ${client.nome_completo.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div class="client-name text-foreground font-bold text-lg mb-1">${highlightText(client.nome_completo)}</div>
+                  <div class="flex items-center gap-2">
+                    <span class="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-semibold">
+                      ${client.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </div>
                 </div>
               </div>
+              <button 
+                class="btn-delete px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-destructive/20" 
+                onclick="event.preventDefault(); event.stopPropagation(); openDeleteModal('${client.id}', '${client.nome_completo}')"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+                Excluir
+              </button>
             </div>
-            <button 
-              class="btn-delete px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-destructive/20" 
-              onclick="openDeleteModal('${client.id}', '${client.nome_completo}')"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-              </svg>
-              Excluir
-            </button>
-          </div>
           
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
             <div class="flex items-center gap-2 text-sm text-muted-foreground">
