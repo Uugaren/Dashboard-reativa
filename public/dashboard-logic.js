@@ -376,12 +376,19 @@ window.initDashboardLogic = function() {
   // Modal de exclusão
   window.openDeleteModal = function(id, name) {
     clientToDeleteId = id;
-    document.getElementById('clientToDelete').textContent = name;
-    deleteModal.style.display = 'flex';
+    const deleteClientNameEl = document.getElementById('deleteClientName');
+    if (deleteClientNameEl) {
+      deleteClientNameEl.textContent = name;
+    }
+    if (deleteModal) {
+      deleteModal.style.display = 'flex';
+    }
   };
 
   window.closeDeleteModal = function() {
-    deleteModal.style.display = 'none';
+    if (deleteModal) {
+      deleteModal.style.display = 'none';
+    }
     clientToDeleteId = null;
   };
 
@@ -406,7 +413,8 @@ window.initDashboardLogic = function() {
   };
 
   // Cadastro de cliente
-  clientForm.addEventListener('submit', async (e) => {
+  if (clientForm) {
+    clientForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!isConnected) {
       showAlert('Conecte-se ao Supabase primeiro', 'error');
@@ -426,7 +434,7 @@ window.initDashboardLogic = function() {
 
       const { error } = await supabase
         .from('clientes')
-        .insert([{\
+        .insert([{
           nome_completo: nome,
           email: email,
           telefone: telefone,
@@ -446,10 +454,12 @@ window.initDashboardLogic = function() {
     } catch (error) {
       showAlert('Erro ao cadastrar cliente: ' + error.message, 'error');
     }
-  });
+    });
+  }
 
   // Registrar compra
-  purchaseForm.addEventListener('submit', async (e) => {
+  if (purchaseForm) {
+    purchaseForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!isConnected) {
       showAlert('Conecte-se ao Supabase primeiro', 'error');
@@ -470,7 +480,7 @@ window.initDashboardLogic = function() {
     try {
       const { error } = await supabase
         .from('compras')
-        .insert([{\
+        .insert([{
           cliente_id: clienteId,
           produto_servico: produto,
           valor: valor,
@@ -489,10 +499,12 @@ window.initDashboardLogic = function() {
     } catch (error) {
       showAlert('Erro ao registrar compra: ' + error.message, 'error');
     }
-  });
+    });
+  }
 
   // Busca de cliente para compra
-  clientSearchInput.addEventListener('input', async function() {
+  if (clientSearchInput) {
+    clientSearchInput.addEventListener('input', async function() {
     const term = this.value.trim().toLowerCase();
     
     if (term.length < 2) {
@@ -540,18 +552,31 @@ window.initDashboardLogic = function() {
     } catch (error) {
       console.error('Erro ao buscar clientes:', error);
     }
-  });
+    });
+  }
 
   window.selectClient = function(id, nome, email, telefone) {
-    document.getElementById('selectedClientId').value = id;
-    document.getElementById('clientSearchInput').value = nome;
-    clientDropdown.style.display = 'none';
-    selectedClientInfo.textContent = `Cliente selecionado: ${nome} (${email})`;
-    selectedClientInfo.style.display = 'block';
+    const selectedClientIdInput = document.getElementById('selectedClientId');
+    const clientSearchInputEl = document.getElementById('clientSearchInput');
+    
+    if (selectedClientIdInput) {
+      selectedClientIdInput.value = id;
+    }
+    if (clientSearchInputEl) {
+      clientSearchInputEl.value = nome;
+    }
+    if (clientDropdown) {
+      clientDropdown.style.display = 'none';
+    }
+    if (selectedClientInfo) {
+      selectedClientInfo.textContent = `Cliente selecionado: ${nome} (${email})`;
+      selectedClientInfo.style.display = 'block';
+    }
   };
 
   // Importação de planilha
-  fileInput.addEventListener('change', async function(e) {
+  if (fileInput) {
+    fileInput.addEventListener('change', async function(e) {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -598,7 +623,7 @@ window.initDashboardLogic = function() {
 
           const { error } = await supabase
             .from('clientes')
-            .insert([{\
+            .insert([{
               nome_completo: cliente.nome_completo,
               email: cliente.email,
               telefone: cliente.telefone,
@@ -631,29 +656,57 @@ window.initDashboardLogic = function() {
       fileInfo.textContent = '';
       showAlert('Erro ao processar arquivo: ' + error.message, 'error');
     }
-  });
+    });
+  }
 
-  // Event listeners
-  connectBtn.addEventListener('click', connectToSupabase);
-  searchInput.addEventListener('input', performSearch);
-  clearSearchBtn.addEventListener('click', clearSearch);
-  itemsPerPageSelect.addEventListener('change', function() {
-    itemsPerPage = parseInt(this.value);
-    currentPage = 1;
-    displayClients();
-  });
+  // Event listeners - Only add if elements exist
+  if (connectBtn) {
+    connectBtn.addEventListener('click', connectToSupabase);
+  }
+  
+  if (searchInput) {
+    searchInput.addEventListener('input', performSearch);
+  }
+  
+  if (clearSearchBtn) {
+    clearSearchBtn.addEventListener('click', clearSearch);
+  }
+  
+  if (itemsPerPageSelect) {
+    itemsPerPageSelect.addEventListener('change', function() {
+      itemsPerPage = parseInt(this.value);
+      currentPage = 1;
+      displayClients();
+    });
+  }
 
   // Fechar modal ao clicar fora
-  deleteModal.addEventListener('click', function(e) {
-    if (e.target === deleteModal) {
-      closeDeleteModal();
-    }
-  });
+  if (deleteModal) {
+    deleteModal.addEventListener('click', function(e) {
+      if (e.target === deleteModal) {
+        closeDeleteModal();
+      }
+    });
+  }
+
+  // Botões do modal de exclusão
+  const cancelDeleteBtn = document.getElementById('cancelDelete');
+  const confirmDeleteBtn = document.getElementById('confirmDelete');
+  
+  if (cancelDeleteBtn) {
+    cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+  }
+  
+  if (confirmDeleteBtn) {
+    confirmDeleteBtn.addEventListener('click', window.confirmDelete);
+  }
 
   // Fechar dropdown ao clicar fora
-  document.addEventListener('click', function(e) {
-    if (!clientSearchInput.contains(e.target) && !clientDropdown.contains(e.target)) {
-      clientDropdown.style.display = 'none';
-    }
-  });
+  if (clientSearchInput && clientDropdown) {
+    document.addEventListener('click', function(e) {
+      if (!clientSearchInput.contains(e.target) && !clientDropdown.contains(e.target)) {
+        clientDropdown.style.display = 'none';
+      }
+    });
+  }
 };

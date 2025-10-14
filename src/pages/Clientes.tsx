@@ -124,6 +124,7 @@ const Clientes = () => {
             </h2>
 
             <form id="purchaseForm" className="space-y-5">
+              <input type="hidden" id="selectedClientId" />
               <div>
                 <label htmlFor="clientSearchInput" className="block text-sm font-semibold mb-2">Buscar Cliente*</label>
                 <input
