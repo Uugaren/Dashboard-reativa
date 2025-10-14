@@ -121,10 +121,15 @@ window.initDashboardLogic = function() {
         .from('indicacoes')
         .select('count', { count: 'exact' });
 
-      document.getElementById('totalClientes').textContent = totalData?.length || 0;
-      document.getElementById('clientesAtivos').textContent = uniqueActiveClients;
-      document.getElementById('totalMensagens').textContent = messagesData?.length || 0;
-      document.getElementById('indicacoesObtidas').textContent = indicationsData?.length || 0;
+      const totalClientesEl = document.getElementById('totalClientes');
+      const clientesAtivosEl = document.getElementById('clientesAtivos');
+      const totalMensagensEl = document.getElementById('totalMensagens');
+      const indicacoesObtidasEl = document.getElementById('indicacoesObtidas');
+
+      if (totalClientesEl) totalClientesEl.textContent = totalData?.length || 0;
+      if (clientesAtivosEl) clientesAtivosEl.textContent = uniqueActiveClients;
+      if (totalMensagensEl) totalMensagensEl.textContent = messagesData?.length || 0;
+      if (indicacoesObtidasEl) indicacoesObtidasEl.textContent = indicationsData?.length || 0;
     } catch (error) {
       console.error('Erro ao carregar métricas:', error);
     }
@@ -152,6 +157,8 @@ window.initDashboardLogic = function() {
 
   // Função para exibir clientes com paginação
   function displayClients() {
+    if (!clientsList) return; // Exit if element doesn't exist
+    
     const start = (currentPage - 1) * itemsPerPage;
     const end = start + itemsPerPage;
     const clientsToShow = filteredClients.slice(start, end);
@@ -275,13 +282,17 @@ window.initDashboardLogic = function() {
     const paginationInfo = document.getElementById('paginationInfo');
     const paginationControls = document.getElementById('paginationControls');
 
+    if (!paginationContainer) return; // Exit if element doesn't exist
+
     if (totalPages <= 1) {
       paginationContainer.style.display = 'none';
       return;
     }
 
     paginationContainer.style.display = 'flex';
-    paginationInfo.textContent = `Página ${currentPage} de ${totalPages}`;
+    if (paginationInfo) {
+      paginationInfo.textContent = `Página ${currentPage} de ${totalPages}`;
+    }
 
     let controls = `
       <button 
@@ -324,7 +335,9 @@ window.initDashboardLogic = function() {
       </button>
     `;
 
-    paginationControls.innerHTML = controls;
+    if (paginationControls) {
+      paginationControls.innerHTML = controls;
+    }
   }
 
   // Função para ir para página
@@ -349,13 +362,15 @@ window.initDashboardLogic = function() {
           client.endereco?.toLowerCase().includes(searchTerm)
         );
       });
-      clearSearchBtn.style.display = 'block';
-      searchInfo.style.display = 'block';
-      searchInfo.textContent = `Encontrados ${filteredClients.length} cliente(s) para "${searchTerm}"`;
+      if (clearSearchBtn) clearSearchBtn.style.display = 'block';
+      if (searchInfo) {
+        searchInfo.style.display = 'block';
+        searchInfo.textContent = `Encontrados ${filteredClients.length} cliente(s) para "${searchTerm}"`;
+      }
     } else {
       filteredClients = allClients;
-      clearSearchBtn.style.display = 'none';
-      searchInfo.style.display = 'none';
+      if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+      if (searchInfo) searchInfo.style.display = 'none';
     }
 
     currentPage = 1;
@@ -364,11 +379,11 @@ window.initDashboardLogic = function() {
 
   // Função para limpar busca
   function clearSearch() {
-    searchInput.value = '';
+    if (searchInput) searchInput.value = '';
     searchTerm = '';
     filteredClients = allClients;
-    clearSearchBtn.style.display = 'none';
-    searchInfo.style.display = 'none';
+    if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+    if (searchInfo) searchInfo.style.display = 'none';
     currentPage = 1;
     displayClients();
   }
@@ -492,9 +507,11 @@ window.initDashboardLogic = function() {
 
       showAlert('Compra registrada com sucesso!', 'success');
       purchaseForm.reset();
-      document.getElementById('selectedClientId').value = '';
-      document.getElementById('clientSearchInput').value = '';
-      selectedClientInfo.style.display = 'none';
+      const selectedClientIdInput = document.getElementById('selectedClientId');
+      const clientSearchInputEl = document.getElementById('clientSearchInput');
+      if (selectedClientIdInput) selectedClientIdInput.value = '';
+      if (clientSearchInputEl) clientSearchInputEl.value = '';
+      if (selectedClientInfo) selectedClientInfo.style.display = 'none';
       await loadMetrics();
     } catch (error) {
       showAlert('Erro ao registrar compra: ' + error.message, 'error');
@@ -508,7 +525,7 @@ window.initDashboardLogic = function() {
     const term = this.value.trim().toLowerCase();
     
     if (term.length < 2) {
-      clientDropdown.style.display = 'none';
+      if (clientDropdown) clientDropdown.style.display = 'none';
       return;
     }
 
@@ -526,10 +543,11 @@ window.initDashboardLogic = function() {
 
       if (error) throw error;
 
-      if (data.length === 0) {
-        clientDropdown.innerHTML = '<div class="no-clients-found p-3 text-muted-foreground text-xs text-center italic">Nenhum cliente encontrado</div>';
-      } else {
-        clientDropdown.innerHTML = data.map((client, index) => `
+      if (clientDropdown) {
+        if (data.length === 0) {
+          clientDropdown.innerHTML = '<div class="no-clients-found p-3 text-muted-foreground text-xs text-center italic">Nenhum cliente encontrado</div>';
+        } else {
+          clientDropdown.innerHTML = data.map((client, index) => `
           <div class="client-option p-4 cursor-pointer border-b border-border last:border-0 hover:bg-gradient-to-r hover:from-primary/10 hover:to-accent/5 transition-all group" onclick="selectClient('${client.id}', '${client.nome_completo}', '${client.email}', '${client.telefone}')">
             <div class="flex items-center gap-3">
               <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-sm text-primary group-hover:scale-110 transition-transform">
@@ -546,9 +564,10 @@ window.initDashboardLogic = function() {
             </div>
           </div>
         `).join('');
+        }
+        
+        clientDropdown.style.display = 'block';
       }
-      
-      clientDropdown.style.display = 'block';
     } catch (error) {
       console.error('Erro ao buscar clientes:', error);
     }
@@ -644,16 +663,20 @@ window.initDashboardLogic = function() {
         }
       }
 
-      fileInfo.innerHTML = `
-        <div class="text-green-600 text-xs">✓ ${success} clientes importados com sucesso</div>
-        ${errors > 0 ? `<div class="text-red-600 text-xs">✗ ${errors} clientes com erro</div>` : ''}
-      `;
+      if (fileInfo) {
+        fileInfo.innerHTML = `
+          <div class="text-green-600 text-xs">✓ ${success} clientes importados com sucesso</div>
+          ${errors > 0 ? `<div class="text-red-600 text-xs">✗ ${errors} clientes com erro</div>` : ''}
+        `;
+      }
 
       await loadClients();
       await loadMetrics();
       showAlert(`Importação concluída: ${success} sucesso, ${errors} erros`, success > 0 ? 'success' : 'error');
     } catch (error) {
-      fileInfo.textContent = '';
+      if (fileInfo) {
+        fileInfo.textContent = '';
+      }
       showAlert('Erro ao processar arquivo: ' + error.message, 'error');
     }
     });
