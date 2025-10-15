@@ -83,7 +83,7 @@ window.initDashboardLogic = function() {
       localStorage.setItem('supabaseKey', key);
 
       isConnected = true;
-      window.supabase = supabase; // Expor globalmente para uso em outras páginas
+      window.supabaseClient = supabase; // Expor globalmente para uso em outras páginas
       connectionStatus.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Conectado';
       connectionStatus.className = 'connection-status px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 bg-green-500/10 text-green-400 border border-green-500/20';
       connectBtn.innerHTML = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>Conectar';
@@ -115,7 +115,7 @@ window.initDashboardLogic = function() {
     if (savedUrl && savedKey) {
       supabase = window.supabase.createClient(savedUrl, savedKey);
       isConnected = true;
-      window.supabase = supabase; // Expor globalmente
+      window.supabaseClient = supabase; // Expor globalmente
       
       // Preencher os campos de input se existirem
       if (supabaseUrlInput) supabaseUrlInput.value = savedUrl;
