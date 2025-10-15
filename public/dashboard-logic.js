@@ -102,9 +102,9 @@ window.initDashboardLogic = function() {
     if (!isConnected) return;
 
     try {
-      const { data: totalData } = await supabase
+      const { count: totalClientes, error: totalError } = await supabase
         .from('clientes')
-        .select('count', { count: 'exact' });
+        .select('*', { count: 'exact', head: true });
 
       const { data: activesData } = await supabase
         .from('compras')
@@ -113,23 +113,23 @@ window.initDashboardLogic = function() {
 
       const uniqueActiveClients = activesData ? new Set(activesData.map(c => c.cliente_id)).size : 0;
 
-      const { data: messagesData } = await supabase
+      const { count: totalMensagens, error: messagesError } = await supabase
         .from('mensagens')
-        .select('count', { count: 'exact' });
+        .select('*', { count: 'exact', head: true });
 
-      const { data: indicationsData } = await supabase
+      const { count: totalIndicacoes, error: indicationsError } = await supabase
         .from('indicacoes')
-        .select('count', { count: 'exact' });
+        .select('*', { count: 'exact', head: true });
 
       const totalClientesEl = document.getElementById('totalClientes');
       const clientesAtivosEl = document.getElementById('clientesAtivos');
       const totalMensagensEl = document.getElementById('totalMensagens');
       const indicacoesObtidasEl = document.getElementById('indicacoesObtidas');
 
-      if (totalClientesEl) totalClientesEl.textContent = totalData?.length || 0;
+      if (totalClientesEl) totalClientesEl.textContent = totalClientes || 0;
       if (clientesAtivosEl) clientesAtivosEl.textContent = uniqueActiveClients;
-      if (totalMensagensEl) totalMensagensEl.textContent = messagesData?.length || 0;
-      if (indicacoesObtidasEl) indicacoesObtidasEl.textContent = indicationsData?.length || 0;
+      if (totalMensagensEl) totalMensagensEl.textContent = totalMensagens || 0;
+      if (indicacoesObtidasEl) indicacoesObtidasEl.textContent = totalIndicacoes || 0;
     } catch (error) {
       console.error('Erro ao carregar métricas:', error);
     }
@@ -141,7 +141,7 @@ window.initDashboardLogic = function() {
 
     try {
       const { data, error } = await supabase
-        .from('clientes')
+        .from('clientes_completos')
         .select('*')
         .order('created_at', { ascending: false });
 
