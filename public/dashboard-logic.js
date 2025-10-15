@@ -542,7 +542,7 @@ window.initDashboardLogic = function() {
           cliente_id: clienteId,
           produto_servico: produto,
           valor: valor,
-          data_entrega: dataEntrega
+          data_compra: dataEntrega
         }]);
 
       if (error) throw error;
