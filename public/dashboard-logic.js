@@ -78,12 +78,22 @@ window.initDashboardLogic = function() {
 
       if (error) throw error;
 
+      // Salvar credenciais no localStorage para persistência
+      localStorage.setItem('supabaseUrl', url);
+      localStorage.setItem('supabaseKey', key);
+
       isConnected = true;
+      window.supabase = supabase; // Expor globalmente para uso em outras páginas
       connectionStatus.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Conectado';
       connectionStatus.className = 'connection-status px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 bg-green-500/10 text-green-400 border border-green-500/20';
       connectBtn.innerHTML = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>Conectar';
       connectBtn.disabled = false;
       showAlert('Conectado ao Supabase com sucesso!', 'success');
+      
+      // Redirecionar para dashboard após conexão bem-sucedida
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1500);
       
       await loadClients();
       await loadMetrics();
@@ -94,6 +104,34 @@ window.initDashboardLogic = function() {
       connectBtn.innerHTML = '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>Conectar';
       connectBtn.disabled = false;
       showAlert('Erro ao conectar: ' + error.message, 'error');
+    }
+  }
+
+  // Função para restaurar conexão salva
+  function restoreConnection() {
+    const savedUrl = localStorage.getItem('supabaseUrl');
+    const savedKey = localStorage.getItem('supabaseKey');
+
+    if (savedUrl && savedKey) {
+      supabase = window.supabase.createClient(savedUrl, savedKey);
+      isConnected = true;
+      window.supabase = supabase; // Expor globalmente
+      
+      // Preencher os campos de input se existirem
+      if (supabaseUrlInput) supabaseUrlInput.value = savedUrl;
+      if (supabaseKeyInput) supabaseKeyInput.value = savedKey;
+      
+      // Atualizar status de conexão se os elementos existirem
+      if (connectionStatus) {
+        connectionStatus.innerHTML = '<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Conectado';
+        connectionStatus.className = 'connection-status px-4 py-3 rounded-xl text-xs font-semibold flex items-center gap-2 bg-green-500/10 text-green-400 border border-green-500/20';
+      }
+      
+      // Carregar dados se não estiver na página de login
+      if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+        loadClients();
+        loadMetrics();
+      }
     }
   }
 
@@ -143,7 +181,7 @@ window.initDashboardLogic = function() {
       const { data, error } = await supabase
         .from('clientes_completos')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('data_cadastro', { ascending: false });
 
       if (error) throw error;
 
@@ -151,6 +189,7 @@ window.initDashboardLogic = function() {
       filteredClients = allClients;
       displayClients();
     } catch (error) {
+      console.error('Erro ao carregar clientes:', error);
       showAlert('Erro ao carregar clientes: ' + error.message, 'error');
     }
   }
@@ -732,4 +771,7 @@ window.initDashboardLogic = function() {
       }
     });
   }
+
+  // Restaurar conexão salva ao inicializar
+  restoreConnection();
 };
