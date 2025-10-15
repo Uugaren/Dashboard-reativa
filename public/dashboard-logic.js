@@ -521,13 +521,17 @@ window.initDashboardLogic = function() {
     }
 
     const clienteId = document.getElementById('selectedClientId').value;
-    const produto = document.getElementById('produtoServico').value.trim();
-    const valor = parseFloat(document.getElementById('valor').value);
-    const dataCompra = document.getElementById('dataCompra').value;
-    const observacoes = document.getElementById('observacoes').value.trim();
+    const produto = document.getElementById('produtoComprado').value.trim();
+    const valor = parseFloat(document.getElementById('valorCompra').value);
+    const dataEntrega = document.getElementById('dataEntrega').value;
 
     if (!clienteId) {
       showAlert('Selecione um cliente', 'error');
+      return;
+    }
+
+    if (!produto) {
+      showAlert('Digite o produto comprado', 'error');
       return;
     }
 
@@ -538,8 +542,7 @@ window.initDashboardLogic = function() {
           cliente_id: clienteId,
           produto_servico: produto,
           valor: valor,
-          data_compra: dataCompra,
-          observacoes: observacoes || null
+          data_entrega: dataEntrega
         }]);
 
       if (error) throw error;

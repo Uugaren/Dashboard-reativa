@@ -150,6 +150,17 @@ const Clientes = () => {
               </div>
 
               <div>
+                <label htmlFor="produtoComprado" className="block text-sm font-semibold mb-2">Produto Comprado*</label>
+                <input
+                  type="text"
+                  id="produtoComprado"
+                  required
+                  className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  placeholder="Digite o nome do produto"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="valorCompra" className="block text-sm font-semibold mb-2">Valor da Compra*</label>
                 <input
                   type="number"
@@ -163,10 +174,10 @@ const Clientes = () => {
               </div>
 
               <div>
-                <label htmlFor="dataCompra" className="block text-sm font-semibold mb-2">Data da Compra*</label>
+                <label htmlFor="dataEntrega" className="block text-sm font-semibold mb-2">Data de Entrega*</label>
                 <input
                   type="date"
-                  id="dataCompra"
+                  id="dataEntrega"
                   required
                   className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
                 />
