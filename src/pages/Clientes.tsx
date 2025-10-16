@@ -11,6 +11,9 @@ const Clientes = () => {
 
   return (
     <Layout>
+      {/* Alert Container */}
+      <div id="alertContainer" className="fixed top-4 right-4 z-50 max-w-md w-full"></div>
+      
       <div className="container mx-auto px-6 py-12">
         {/* Header */}
         <div className="mb-12 animate-fade-in">
