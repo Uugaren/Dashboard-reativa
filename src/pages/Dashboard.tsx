@@ -1,16 +1,96 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const Dashboard = () => {
+  const [topSpenders, setTopSpenders] = useState<any[]>([]);
+  const [topTicket, setTopTicket] = useState<any[]>([]);
+  const [topPurchases, setTopPurchases] = useState<any[]>([]);
+  const [salesOverTime, setSalesOverTime] = useState<any[]>([]);
+
   useEffect(() => {
     // Initialize dashboard logic for metrics
     if ((window as any).initDashboardLogic) {
       (window as any).initDashboardLogic();
     }
+
+    // Load chart data
+    loadChartData();
   }, []);
+
+  const loadChartData = async () => {
+    const supabase = (window as any).supabaseClient;
+    if (!supabase) return;
+
+    try {
+      // Top 10 clientes por valor total gasto
+      const { data: spendersData } = await supabase
+        .from('clientes_completos')
+        .select('nome_completo, total_gasto')
+        .not('total_gasto', 'is', null)
+        .order('total_gasto', { ascending: false })
+        .limit(10);
+
+      setTopSpenders(spendersData?.map(c => ({
+        nome: c.nome_completo.split(' ')[0],
+        valor: parseFloat(c.total_gasto || 0)
+      })) || []);
+
+      // Top 10 clientes por ticket médio
+      const { data: ticketData } = await supabase
+        .from('clientes_completos')
+        .select('nome_completo, ticket_medio')
+        .not('ticket_medio', 'is', null)
+        .order('ticket_medio', { ascending: false })
+        .limit(10);
+
+      setTopTicket(ticketData?.map(c => ({
+        nome: c.nome_completo.split(' ')[0],
+        valor: parseFloat(c.ticket_medio || 0)
+      })) || []);
+
+      // Top 10 clientes por quantidade de compras
+      const { data: purchasesData } = await supabase
+        .from('clientes_completos')
+        .select('nome_completo, total_compras')
+        .not('total_compras', 'is', null)
+        .order('total_compras', { ascending: false })
+        .limit(10);
+
+      setTopPurchases(purchasesData?.map(c => ({
+        nome: c.nome_completo.split(' ')[0],
+        quantidade: parseInt(c.total_compras || 0)
+      })) || []);
+
+      // Vendas ao longo do tempo (últimos 30 dias)
+      const { data: salesData } = await supabase
+        .from('compras')
+        .select('data_compra, valor')
+        .gte('data_compra', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+        .order('data_compra', { ascending: true });
+
+      // Agrupar vendas por dia
+      const salesByDay: Record<string, number> = {};
+      salesData?.forEach((sale: any) => {
+        const date = new Date(sale.data_compra + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        salesByDay[date] = (salesByDay[date] || 0) + parseFloat(sale.valor || 0);
+      });
+
+      setSalesOverTime(Object.entries(salesByDay).map(([data, valor]) => ({
+        data,
+        valor: parseFloat(valor.toFixed(2))
+      })));
+
+    } catch (error) {
+      console.error('Erro ao carregar dados dos gráficos:', error);
+    }
+  };
 
   return (
     <Layout>
+      {/* Alert Container */}
+      <div id="alertContainer" className="fixed top-4 right-4 z-50 max-w-md w-full"></div>
+      
       <div className="container mx-auto px-6 py-12">
         {/* Header */}
         <div className="mb-12 animate-fade-in">
@@ -89,21 +169,141 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Additional Info */}
-        <div className="mt-12 glass rounded-2xl p-8 animate-fade-in">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
+        {/* Charts Grid */}
+        <div className="mt-12 space-y-8">
+          {/* Top Spenders */}
+          <div className="glass rounded-2xl p-8 animate-fade-in">
+            <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              Top 10 Clientes por Valor Total Gasto
+            </h3>
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={topSpenders}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="nome" stroke="hsl(var(--muted-foreground))" />
+                <YAxis stroke="hsl(var(--muted-foreground))" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--background))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
+                  formatter={(value: any) => [`R$ ${value.toFixed(2)}`, 'Total Gasto']}
+                />
+                <Bar dataKey="valor" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Two Column Charts */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            {/* Top Ticket Médio */}
+            <div className="glass rounded-2xl p-8 animate-fade-in">
+              <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                </div>
+                Top 10 por Ticket Médio
+              </h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={topTicket} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
+                  <YAxis dataKey="nome" type="category" stroke="hsl(var(--muted-foreground))" width={80} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: any) => [`R$ ${value.toFixed(2)}`, 'Ticket Médio']}
+                  />
+                  <Bar dataKey="valor" fill="hsl(var(--accent))" radius={[0, 8, 8, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div>
-              <h3 className="text-xl font-bold mb-2">Visão Geral do Sistema</h3>
-              <p className="text-muted-foreground">
-                As métricas são atualizadas automaticamente quando você se conecta ao Supabase. 
-                Certifique-se de que as tabelas clientes, compras, mensagens e indicações estão configuradas corretamente.
-              </p>
+
+            {/* Top Quantidade de Compras */}
+            <div className="glass rounded-2xl p-8 animate-fade-in">
+              <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                  <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                  </svg>
+                </div>
+                Top 10 em Compras
+              </h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={topPurchases}
+                    dataKey="quantidade"
+                    nameKey="nome"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    label={(entry) => `${entry.nome}: ${entry.quantidade}`}
+                  >
+                    {topPurchases.map((entry, index) => (
+                      <Cell 
+                        key={`cell-${index}`} 
+                        fill={`hsl(${(index * 360) / topPurchases.length}, 70%, 60%)`} 
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))', 
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
+          </div>
+
+          {/* Sales Over Time */}
+          <div className="glass rounded-2xl p-8 animate-fade-in">
+            <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                </svg>
+              </div>
+              Evolução de Vendas (Últimos 30 dias)
+            </h3>
+            <ResponsiveContainer width="100%" height={350}>
+              <LineChart data={salesOverTime}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" />
+                <YAxis stroke="hsl(var(--muted-foreground))" />
+                <Tooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--background))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px'
+                  }}
+                  formatter={(value: any) => [`R$ ${value.toFixed(2)}`, 'Vendas']}
+                />
+                <Legend />
+                <Line 
+                  type="monotone" 
+                  dataKey="valor" 
+                  stroke="hsl(var(--primary))" 
+                  strokeWidth={3}
+                  dot={{ fill: 'hsl(var(--primary))', r: 4 }}
+                  activeDot={{ r: 6 }}
+                  name="Total de Vendas"
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
