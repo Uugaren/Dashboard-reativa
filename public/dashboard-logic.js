@@ -35,6 +35,12 @@ window.initDashboardLogic = function() {
 
   // Função para mostrar alertas
   function showAlert(message, type = 'success') {
+    // Verificar se alertContainer existe, senão usar console
+    if (!alertContainer) {
+      console.log(`${type === 'success' ? '✓' : '✗'} ${message}`);
+      return;
+    }
+    
     const alert = document.createElement('div');
     const iconSvg = type === 'success' 
       ? '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
@@ -249,15 +255,26 @@ window.initDashboardLogic = function() {
                   </div>
                 </div>
               </div>
-              <button 
-                class="btn-delete px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-destructive/20" 
-                onclick="event.preventDefault(); event.stopPropagation(); openDeleteModal('${client.id}', '${client.nome_completo}')"
-              >
-                <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
-                Excluir
-              </button>
+              <div class="flex items-center gap-2">
+                <button 
+                  class="btn-edit px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-primary/20" 
+                  onclick="event.preventDefault(); event.stopPropagation(); openEditModal('${client.id}')"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                  </svg>
+                  Editar
+                </button>
+                <button 
+                  class="btn-delete px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-destructive/20" 
+                  onclick="event.preventDefault(); event.stopPropagation(); openDeleteModal('${client.id}', '${client.nome_completo}')"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                  Excluir
+                </button>
+              </div>
             </div>
           
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
@@ -463,6 +480,105 @@ window.initDashboardLogic = function() {
       await loadMetrics();
     } catch (error) {
       showAlert('Erro ao excluir cliente: ' + error.message, 'error');
+    }
+  };
+
+  // Modal de edição
+  window.openEditModal = async function(id) {
+    const editModal = document.getElementById('editModal');
+    if (!editModal || !isConnected) return;
+
+    try {
+      // Carregar dados do cliente
+      const { data: clientData, error: clientError } = await supabase
+        .from('clientes')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (clientError) throw clientError;
+
+      // Carregar compras do cliente
+      const { data: purchasesData, error: purchasesError } = await supabase
+        .from('compras')
+        .select('*')
+        .eq('cliente_id', id)
+        .order('data_compra', { ascending: false });
+
+      if (purchasesError) throw purchasesError;
+
+      // Preencher formulário
+      document.getElementById('editClientId').value = clientData.id;
+      document.getElementById('editNomeCompleto').value = clientData.nome_completo;
+      document.getElementById('editEmail').value = clientData.email;
+      document.getElementById('editTelefone').value = clientData.telefone;
+      document.getElementById('editEndereco').value = clientData.endereco || '';
+      document.getElementById('editDataAniversario').value = clientData.data_aniversario || '';
+      document.getElementById('editAtivo').checked = clientData.ativo;
+
+      // Exibir compras
+      const purchasesList = document.getElementById('editPurchasesList');
+      if (purchasesData && purchasesData.length > 0) {
+        purchasesList.innerHTML = purchasesData.map(purchase => `
+          <div class="p-4 bg-muted/30 rounded-lg border border-border">
+            <div class="flex items-start justify-between mb-2">
+              <div class="flex-1">
+                <div class="font-semibold text-foreground">${purchase.produto_servico}</div>
+                <div class="text-sm text-muted-foreground mt-1">
+                  Valor: R$ ${purchase.valor?.toFixed(2) || '0.00'}
+                </div>
+                <div class="text-xs text-muted-foreground mt-1">
+                  Entrega: ${purchase.data_compra ? new Date(purchase.data_compra + 'T00:00:00').toLocaleDateString('pt-BR') : 'Não definida'}
+                </div>
+              </div>
+              <button 
+                class="px-3 py-1.5 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all border border-destructive/20"
+                onclick="deletePurchase('${purchase.id}')"
+              >
+                Excluir
+              </button>
+            </div>
+          </div>
+        `).join('');
+      } else {
+        purchasesList.innerHTML = '<div class="text-center text-muted-foreground text-sm py-4">Nenhuma compra registrada</div>';
+      }
+
+      editModal.style.display = 'flex';
+    } catch (error) {
+      showAlert('Erro ao carregar dados: ' + error.message, 'error');
+    }
+  };
+
+  window.closeEditModal = function() {
+    const editModal = document.getElementById('editModal');
+    if (editModal) {
+      editModal.style.display = 'none';
+    }
+  };
+
+  window.deletePurchase = async function(purchaseId) {
+    if (!confirm('Deseja realmente excluir esta compra?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('compras')
+        .delete()
+        .eq('id', purchaseId);
+
+      if (error) throw error;
+
+      showAlert('Compra excluída com sucesso!', 'success');
+      
+      // Recarregar modal
+      const clientId = document.getElementById('editClientId').value;
+      if (clientId) {
+        await openEditModal(clientId);
+      }
+      
+      await loadMetrics();
+    } catch (error) {
+      showAlert('Erro ao excluir compra: ' + error.message, 'error');
     }
   };
 
@@ -764,6 +880,75 @@ window.initDashboardLogic = function() {
   
   if (confirmDeleteBtn) {
     confirmDeleteBtn.addEventListener('click', window.confirmDelete);
+  }
+
+  // Modal de edição - fechar ao clicar fora
+  const editModal = document.getElementById('editModal');
+  if (editModal) {
+    editModal.addEventListener('click', function(e) {
+      if (e.target === editModal) {
+        closeEditModal();
+      }
+    });
+  }
+
+  // Formulário de edição
+  const editClientForm = document.getElementById('editClientForm');
+  if (editClientForm) {
+    editClientForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!isConnected) {
+        showAlert('Conecte-se ao Supabase primeiro', 'error');
+        return;
+      }
+
+      const id = document.getElementById('editClientId').value;
+      const nome = document.getElementById('editNomeCompleto').value.trim();
+      const email = document.getElementById('editEmail').value.trim();
+      const telefone = document.getElementById('editTelefone').value.trim();
+      const dataAniversario = document.getElementById('editDataAniversario').value;
+      const endereco = document.getElementById('editEndereco').value.trim();
+      const ativo = document.getElementById('editAtivo').checked;
+
+      try {
+        const primeiroNome = nome.split(' ')[0];
+        let mesDia = null;
+        
+        if (dataAniversario) {
+          const [ano, mes, dia] = dataAniversario.split('-');
+          mesDia = `${mes}-${dia}`;
+        }
+
+        const { error } = await supabase
+          .from('clientes')
+          .update({
+            nome_completo: nome,
+            email: email,
+            telefone: telefone,
+            data_aniversario: dataAniversario || null,
+            mes_dia_aniversario: mesDia,
+            primeiro_nome: primeiroNome,
+            endereco: endereco || null,
+            ativo: ativo
+          })
+          .eq('id', id);
+
+        if (error) throw error;
+
+        showAlert('Cliente atualizado com sucesso!', 'success');
+        closeEditModal();
+        await loadClients();
+        await loadMetrics();
+      } catch (error) {
+        showAlert('Erro ao atualizar cliente: ' + error.message, 'error');
+      }
+    });
+  }
+
+  // Botões do modal de edição
+  const cancelEditBtn = document.getElementById('cancelEdit');
+  if (cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', closeEditModal);
   }
 
   // Fechar dropdown ao clicar fora

@@ -318,6 +318,110 @@ const Clientes = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      <div id="editModal" className="hidden fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto">
+        <div className="glass rounded-2xl p-8 max-w-2xl w-full mx-4 my-8 animate-scale-in">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-2xl font-bold flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+              </div>
+              Editar Cliente
+            </h3>
+          </div>
+
+          <form id="editClientForm" className="space-y-6">
+            <input type="hidden" id="editClientId" />
+            
+            <div className="space-y-4">
+              <h4 className="font-semibold text-lg">Dados do Cliente</h4>
+              
+              <div>
+                <label htmlFor="editNomeCompleto" className="block text-sm font-semibold mb-2">Nome Completo*</label>
+                <input
+                  type="text"
+                  id="editNomeCompleto"
+                  required
+                  className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="editEmail" className="block text-sm font-semibold mb-2">E-mail*</label>
+                  <input
+                    type="email"
+                    id="editEmail"
+                    required
+                    className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="editTelefone" className="block text-sm font-semibold mb-2">Telefone*</label>
+                  <input
+                    type="tel"
+                    id="editTelefone"
+                    required
+                    className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="editEndereco" className="block text-sm font-semibold mb-2">Endereço</label>
+                <input
+                  type="text"
+                  id="editEndereco"
+                  className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="editDataAniversario" className="block text-sm font-semibold mb-2">Data de Aniversário</label>
+                <input
+                  type="date"
+                  id="editDataAniversario"
+                  className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="editAtivo"
+                  className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
+                />
+                <label htmlFor="editAtivo" className="text-sm font-semibold">Cliente Ativo</label>
+              </div>
+            </div>
+
+            <div className="space-y-4 pt-4 border-t border-border">
+              <h4 className="font-semibold text-lg">Histórico de Compras</h4>
+              <div id="editPurchasesList" className="space-y-3 max-h-60 overflow-y-auto"></div>
+            </div>
+
+            <div className="flex gap-3 pt-4">
+              <button
+                type="button"
+                id="cancelEdit"
+                className="flex-1 px-6 py-3 bg-muted/50 hover:bg-muted text-foreground rounded-xl font-semibold transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground rounded-xl font-semibold hover:shadow-primary transition-all"
+              >
+                Salvar Alterações
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </Layout>
   );
 };
