@@ -25,41 +25,59 @@ const Dashboard = () => {
     try {
       // Top 10 clientes por valor total gasto
       const { data: spendersData } = await supabase
-        .from('clientes_completos')
-        .select('nome_completo, total_gasto')
-        .not('total_gasto', 'is', null)
-        .order('total_gasto', { ascending: false })
-        .limit(10);
+        .from('clientes')
+        .select('nome_completo, id')
+        .order('id', { ascending: true });
 
-      setTopSpenders(spendersData?.map(c => ({
-        nome: c.nome_completo.split(' ')[0],
-        valor: parseFloat(c.total_gasto || 0)
+      // Calcular total gasto por cliente
+      const { data: comprasData } = await supabase
+        .from('compras')
+        .select('cliente_id, valor');
+
+      const clienteGastos = new Map();
+      comprasData?.forEach((compra: any) => {
+        const atual = clienteGastos.get(compra.cliente_id) || 0;
+        clienteGastos.set(compra.cliente_id, atual + parseFloat(compra.valor || 0));
+      });
+
+      const spendersWithTotal = spendersData?.map(c => ({
+        nome: c.nome_completo,
+        valor: clienteGastos.get(c.id) || 0
+      })).filter(c => c.valor > 0).sort((a, b) => b.valor - a.valor).slice(0, 10);
+
+      setTopSpenders(spendersWithTotal?.map(c => ({
+        nome: c.nome.split(' ')[0],
+        valor: c.valor
       })) || []);
 
       // Top 10 clientes por ticket médio
-      const { data: ticketData } = await supabase
-        .from('clientes_completos')
-        .select('nome_completo, ticket_medio')
-        .not('ticket_medio', 'is', null)
-        .order('ticket_medio', { ascending: false })
-        .limit(10);
+      const ticketMedioData = spendersData?.map(c => {
+        const comprasCliente = comprasData?.filter((comp: any) => comp.cliente_id === c.id);
+        const totalGasto = clienteGastos.get(c.id) || 0;
+        const qtdCompras = comprasCliente?.length || 0;
+        return {
+          nome: c.nome_completo,
+          ticketMedio: qtdCompras > 0 ? totalGasto / qtdCompras : 0
+        };
+      }).filter(c => c.ticketMedio > 0).sort((a, b) => b.ticketMedio - a.ticketMedio).slice(0, 10);
 
-      setTopTicket(ticketData?.map(c => ({
-        nome: c.nome_completo.split(' ')[0],
-        valor: parseFloat(c.ticket_medio || 0)
+      setTopTicket(ticketMedioData?.map(c => ({
+        nome: c.nome.split(' ')[0],
+        valor: c.ticketMedio
       })) || []);
 
       // Top 10 clientes por quantidade de compras
-      const { data: purchasesData } = await supabase
-        .from('clientes_completos')
-        .select('nome_completo, total_compras')
-        .not('total_compras', 'is', null)
-        .order('total_compras', { ascending: false })
-        .limit(10);
+      const purchasesCountData = spendersData?.map(c => {
+        const comprasCliente = comprasData?.filter((comp: any) => comp.cliente_id === c.id);
+        return {
+          nome: c.nome_completo,
+          quantidade: comprasCliente?.length || 0
+        };
+      }).filter(c => c.quantidade > 0).sort((a, b) => b.quantidade - a.quantidade).slice(0, 10);
 
-      setTopPurchases(purchasesData?.map(c => ({
-        nome: c.nome_completo.split(' ')[0],
-        quantidade: parseInt(c.total_compras || 0)
+      setTopPurchases(purchasesCountData?.map(c => ({
+        nome: c.nome.split(' ')[0],
+        quantidade: c.quantidade
       })) || []);
 
       // Vendas ao longo do tempo (últimos 30 dias)
