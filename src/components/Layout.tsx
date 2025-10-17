@@ -4,6 +4,7 @@ import { useState } from "react";
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
     {
@@ -47,8 +48,53 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 h-screen bg-card border-r border-border transition-all duration-300 z-50 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+      {/* Mobile Top Bar */}
+      <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-50 flex items-center justify-between px-4">
+        <h1 className="text-lg font-bold gradient-text">Painel de Clientes</h1>
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          className="p-2 rounded-lg hover:bg-muted transition-colors"
+        >
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={isMobileMenuOpen ? "M6 18L18 6M6 6l12 12" : "M4 6h16M4 12h16M4 18h16"} />
+          </svg>
+        </button>
+      </header>
+
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Drawer */}
+      <aside className={`md:hidden fixed top-16 left-0 h-[calc(100vh-4rem)] bg-card border-r border-border transition-transform duration-300 z-40 w-64 ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        <nav className="flex-1 py-6 px-4 space-y-2">
+          {navItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                onClick={() => setIsMobileMenuOpen(false)}
+                className={`flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-300 ${
+                  isActive
+                    ? 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {item.icon}
+                <span className="font-semibold text-sm">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {/* Desktop Sidebar */}
+      <aside className={`hidden md:block fixed top-0 left-0 h-screen bg-card border-r border-border transition-all duration-300 z-50 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
         <div className="flex flex-col h-full">
           {/* Header */}
           <div className="h-20 border-b border-border flex items-center justify-between px-6">
@@ -106,11 +152,32 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
       </aside>
 
       {/* Main Content */}
-      <main className={`transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-20'}`}>
-        <div className="min-h-screen">
+      <main className={`transition-all duration-300 pt-16 md:pt-0 ${isSidebarOpen ? 'md:ml-64' : 'md:ml-20'}`}>
+        <div className="min-h-screen pb-20 md:pb-0">
           {children}
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-card border-t border-border z-50 flex items-center justify-around px-2">
+        {navItems.map((item) => {
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 min-w-[70px] ${
+                isActive
+                  ? 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-primary'
+                  : 'text-muted-foreground'
+              }`}
+            >
+              {item.icon}
+              <span className="text-xs font-medium">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 };
