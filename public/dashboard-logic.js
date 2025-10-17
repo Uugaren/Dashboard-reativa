@@ -255,9 +255,9 @@ window.initDashboardLogic = function() {
                   </div>
                 </div>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex flex-col gap-2 min-w-[100px]">
                 <button 
-                  class="btn-edit px-4 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-primary/20" 
+                  class="btn-edit px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 border border-primary/20 w-full" 
                   onclick="event.preventDefault(); event.stopPropagation(); openEditModal('${client.id}')"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -266,7 +266,7 @@ window.initDashboardLogic = function() {
                   Editar
                 </button>
                 <button 
-                  class="btn-delete px-4 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all flex items-center gap-2 border border-destructive/20" 
+                  class="btn-delete px-3 py-2 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 border border-destructive/20 w-full" 
                   onclick="event.preventDefault(); event.stopPropagation(); openDeleteModal('${client.id}', '${client.nome_completo}')"
                 >
                   <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
