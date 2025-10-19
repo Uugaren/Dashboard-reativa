@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
@@ -7,6 +8,8 @@ const Dashboard = () => {
   const [topTicket, setTopTicket] = useState<any[]>([]);
   const [topPurchases, setTopPurchases] = useState<any[]>([]);
   const [salesOverTime, setSalesOverTime] = useState<any[]>([]);
+  const [totalMensagens, setTotalMensagens] = useState(0);
+  const [totalIndicacoes, setTotalIndicacoes] = useState(0);
 
   useEffect(() => {
     // Initialize dashboard logic for metrics
@@ -99,6 +102,18 @@ const Dashboard = () => {
         valor: parseFloat(valor.toFixed(2))
       })));
 
+      // Buscar total de mensagens
+      const { count: mensagensCount } = await supabase
+        .from('mensagens')
+        .select('*', { count: 'exact', head: true });
+      setTotalMensagens(mensagensCount || 0);
+
+      // Buscar total de indicações
+      const { count: indicacoesCount } = await supabase
+        .from('indicacoes')
+        .select('*', { count: 'exact', head: true });
+      setTotalIndicacoes(indicacoesCount || 0);
+
     } catch (error) {
       console.error('Erro ao carregar dados dos gráficos:', error);
     }
@@ -123,36 +138,40 @@ const Dashboard = () => {
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Total Clientes */}
-          <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group" style={{ animationDelay: '0.1s' }}>
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="relative">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                  <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
+          <Link to="/clientes" className="block">
+            <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer" style={{ animationDelay: '0.1s' }}>
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
                 </div>
+                <div className="text-4xl font-bold mb-2 text-foreground" id="totalClientes">0</div>
+                <div className="text-sm font-semibold text-muted-foreground">Total de Clientes</div>
               </div>
-              <div className="text-4xl font-bold mb-2 text-foreground" id="totalClientes">0</div>
-              <div className="text-sm font-semibold text-muted-foreground">Total de Clientes</div>
             </div>
-          </div>
+          </Link>
 
           {/* Clientes Ativos */}
-          <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group" style={{ animationDelay: '0.2s' }}>
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-            <div className="relative">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
-                  <svg className="w-7 h-7 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+          <Link to="/clientes" className="block">
+            <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer" style={{ animationDelay: '0.2s' }}>
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="relative">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
+                    <svg className="w-7 h-7 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
                 </div>
+                <div className="text-4xl font-bold mb-2 text-foreground" id="clientesAtivos">0</div>
+                <div className="text-sm font-semibold text-muted-foreground">Clientes Ativos</div>
               </div>
-              <div className="text-4xl font-bold mb-2 text-foreground" id="clientesAtivos">0</div>
-              <div className="text-sm font-semibold text-muted-foreground">Clientes Ativos</div>
             </div>
-          </div>
+          </Link>
 
           {/* Total Mensagens */}
           <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group" style={{ animationDelay: '0.3s' }}>
@@ -165,7 +184,7 @@ const Dashboard = () => {
                   </svg>
                 </div>
               </div>
-              <div className="text-4xl font-bold mb-2 text-foreground" id="totalMensagens">0</div>
+              <div className="text-4xl font-bold mb-2 text-foreground">{totalMensagens}</div>
               <div className="text-sm font-semibold text-muted-foreground">Total de Mensagens</div>
             </div>
           </div>
@@ -181,7 +200,7 @@ const Dashboard = () => {
                   </svg>
                 </div>
               </div>
-              <div className="text-4xl font-bold mb-2 text-foreground" id="indicacoesObtidas">0</div>
+              <div className="text-4xl font-bold mb-2 text-foreground">{totalIndicacoes}</div>
               <div className="text-sm font-semibold text-muted-foreground">Indicações Obtidas</div>
             </div>
           </div>
