@@ -130,12 +130,12 @@ const Conversas = () => {
             <div className="space-y-6 max-h-[600px] overflow-y-auto pr-4">
               {messages.map((message, index) => (
                 <div key={message.id} className="animate-slide-in" style={{ animationDelay: `${index * 0.05}s` }}>
-                  {/* Client Message (if exists) */}
-                  {message.conteudo && (
+                  {/* Client Message (user_message) */}
+                  {message.user_message && (
                     <div className="flex justify-end mb-4">
                       <div className="max-w-[70%]">
                         <div className="bg-primary/10 rounded-2xl rounded-tr-sm p-4 border border-primary/20">
-                          <p className="text-sm">{message.conteudo}</p>
+                          <p className="text-sm">{message.user_message}</p>
                         </div>
                         <div className="flex items-center gap-2 mt-2 justify-end">
                           <span className="text-xs text-muted-foreground">
@@ -149,9 +149,9 @@ const Conversas = () => {
                     </div>
                   )}
 
-                  {/* Bot Response */}
+                  {/* Bot Response (bot_message) */}
                   {message.bot_message && (
-                    <div className="flex justify-start">
+                    <div className="flex justify-start mb-4">
                       <div className="max-w-[70%]">
                         <div className="bg-accent/10 rounded-2xl rounded-tl-sm p-4 border border-accent/20">
                           <p className="text-sm">{message.bot_message}</p>
