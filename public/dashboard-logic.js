@@ -257,6 +257,15 @@ window.initDashboardLogic = function() {
               </div>
               <div class="flex flex-col gap-2 min-w-[100px]">
                 <button 
+                  class="px-3 py-2 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 border border-accent/20 w-full" 
+                  onclick="event.preventDefault(); event.stopPropagation(); window.location.href='/conversas?id=${client.id}'"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"/>
+                  </svg>
+                  Conversas
+                </button>
+                <button 
                   class="btn-edit px-3 py-2 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 border border-primary/20 w-full" 
                   onclick="event.preventDefault(); event.stopPropagation(); openEditModal('${client.id}')"
                 >
