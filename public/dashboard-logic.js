@@ -774,75 +774,103 @@ window.initDashboardLogic = function() {
     fileInfo.textContent = `Processando: ${file.name}...`;
 
     try {
-      let clientes = [];
+      let registros = [];
       
       if (file.name.endsWith('.csv')) {
         const text = await file.text();
         const result = Papa.parse(text, { header: true });
-        clientes = result.data;
+        registros = result.data.filter(row => row.nome_completo && row.email && row.telefone);
       } else {
         const data = await file.arrayBuffer();
         const workbook = XLSX.read(data);
         const sheetName = workbook.SheetNames[0];
-        clientes = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+        registros = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]).filter(row => row.nome_completo && row.email && row.telefone);
       }
 
-      let success = 0;
-      let errors = 0;
+      if (registros.length === 0) {
+        showAlert('Nenhum registro válido encontrado no arquivo', 'error');
+        fileInfo.textContent = '';
+        return;
+      }
 
-      for (const cliente of clientes) {
-        if (!cliente.nome_completo || !cliente.email || !cliente.telefone || !cliente.data_aniversario) {
-          errors++;
-          continue;
-        }
+      fileInfo.textContent = `Inserindo ${registros.length} registros na fila de processamento...`;
 
-        try {
-          let dataAniversario = cliente.data_aniversario;
+      // Preparar dados para staging
+      const stagingData = registros.map(registro => {
+        let dataAniversario = null;
+        if (registro.data_aniversario) {
+          dataAniversario = registro.data_aniversario;
           if (dataAniversario.includes('/')) {
             const [dia, mes, ano] = dataAniversario.split('/');
             dataAniversario = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
           }
-
-          const primeiroNome = cliente.nome_completo.split(' ')[0];
-          const [ano, mes, dia] = dataAniversario.split('-');
-          const mesDia = `${mes}-${dia}`;
-
-          const { error } = await supabase
-            .from('clientes')
-            .insert([{
-              nome_completo: cliente.nome_completo,
-              email: cliente.email,
-              telefone: cliente.telefone,
-              data_aniversario: dataAniversario,
-              mes_dia_aniversario: mesDia,
-              primeiro_nome: primeiroNome,
-              endereco: cliente.endereco || null,
-              ativo: true
-            }]);
-
-          if (error) {
-            errors++;
-          } else {
-            success++;
-          }
-        } catch (err) {
-          errors++;
         }
+
+        let dataCompra = null;
+        if (registro.data_compra) {
+          dataCompra = registro.data_compra;
+          if (dataCompra.includes('/')) {
+            const [dia, mes, ano] = dataCompra.split('/');
+            dataCompra = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+          }
+        }
+
+        return {
+          nome_completo: registro.nome_completo,
+          email: registro.email,
+          telefone: registro.telefone,
+          endereco: registro.endereco || null,
+          data_aniversario: dataAniversario,
+          produto_servico: registro.produto_servico || null,
+          valor_compra: registro.valor_compra ? parseFloat(registro.valor_compra) : null,
+          data_compra: dataCompra,
+          observacoes_compra: registro.observacoes_compra || null,
+          status_importacao: 'pendente'
+        };
+      });
+
+      // Inserir na tabela staging
+      const { error: stagingError } = await supabase
+        .from('clientes_compras_staging')
+        .insert(stagingData);
+
+      if (stagingError) {
+        throw new Error(`Erro ao inserir na fila: ${stagingError.message}`);
       }
+
+      fileInfo.textContent = 'Processando registros...';
+
+      // Chamar a função que processa o staging
+      const { data: resultado, error: processError } = await supabase
+        .rpc('processar_importacao_staging');
+
+      if (processError) {
+        throw new Error(`Erro ao processar importação: ${processError.message}`);
+      }
+
+      const { total_registros, processados_sucesso, processados_erro, detalhes } = resultado[0];
 
       if (fileInfo) {
         fileInfo.innerHTML = `
-          <div class="text-green-600 text-xs">✓ ${success} clientes importados com sucesso</div>
-          ${errors > 0 ? `<div class="text-red-600 text-xs">✗ ${errors} clientes com erro</div>` : ''}
+          <div class="text-green-600 text-xs">✓ ${processados_sucesso} registros importados com sucesso</div>
+          ${processados_erro > 0 ? `<div class="text-red-600 text-xs">✗ ${processados_erro} registros com erro</div>` : ''}
+          <div class="text-gray-600 text-xs">Total processado: ${total_registros}</div>
         `;
       }
 
       await loadClients();
       await loadMetrics();
-      showAlert(`Importação concluída: ${success} sucesso, ${errors} erros`, success > 0 ? 'success' : 'error');
+      showAlert(
+        `Importação concluída: ${processados_sucesso} sucesso, ${processados_erro} erros`, 
+        processados_sucesso > 0 ? 'success' : 'error'
+      );
+      
+      // Limpar input de arquivo
+      e.target.value = '';
     } catch (error) {
+      console.error('Erro na importação:', error);
       if (fileInfo) {
-        fileInfo.textContent = '';
+        fileInfo.innerHTML = `<div class="text-red-600 text-xs">Erro: ${error.message}</div>`;
       }
       showAlert('Erro ao processar arquivo: ' + error.message, 'error');
     }
