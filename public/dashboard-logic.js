@@ -772,19 +772,20 @@ window.initDashboardLogic = function() {
     }
 
     fileInfo.textContent = `Processando: ${file.name}...`;
+    fileInfo.style.color = '#FE6E4B';
 
     try {
       let registros = [];
       
       if (file.name.endsWith('.csv')) {
         const text = await file.text();
-        const result = Papa.parse(text, { header: true });
-        registros = result.data.filter(row => row.nome_completo && row.email && row.telefone);
+        const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+        registros = result.data;
       } else {
         const data = await file.arrayBuffer();
-        const workbook = XLSX.read(data);
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheetName = workbook.SheetNames[0];
-        registros = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]).filter(row => row.nome_completo && row.email && row.telefone);
+        registros = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
       }
 
       if (registros.length === 0) {
@@ -793,84 +794,256 @@ window.initDashboardLogic = function() {
         return;
       }
 
-      fileInfo.textContent = `Inserindo ${registros.length} registros na fila de processamento...`;
+      console.log('=== DEBUG PROCESSAMENTO ===');
+      console.log('Total de linhas:', registros.length);
+      console.log('Primeira linha:', registros[0]);
+      console.log('Colunas disponíveis:', Object.keys(registros[0]));
 
-      // Preparar dados para staging
-      const stagingData = registros.map(registro => {
-        let dataAniversario = null;
-        if (registro.data_aniversario) {
-          dataAniversario = registro.data_aniversario;
-          if (dataAniversario.includes('/')) {
-            const [dia, mes, ano] = dataAniversario.split('/');
-            dataAniversario = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
+      // Mapear colunas (aceitar variações de nome)
+      const clients = registros.map((row, index) => {
+        // Normalizar nomes de colunas
+        const normalizedRow = {};
+        Object.keys(row).forEach(key => {
+          normalizedRow[key.toLowerCase().trim().replace(/\s+/g, '_')] = row[key];
+        });
+
+        console.log(`Linha ${index}:`, normalizedRow);
+
+        // Extrair dados do cliente
+        const nome = normalizedRow['nome_completo'] || normalizedRow['nome'] || '';
+        const email = normalizedRow['email'] || normalizedRow['e-mail'] || '';
+        const telefone = normalizedRow['telefone'] || normalizedRow['phone'] || '';
+        let dataAniversario = normalizedRow['data_aniversario'] || normalizedRow['aniversario'] || '';
+        const endereco = normalizedRow['endereco'] || normalizedRow['endereço'] || '';
+
+        // Extrair dados da compra
+        const produtoServico = normalizedRow['produto_servico'] || normalizedRow['produto'] || normalizedRow['servico'] || '';
+        const valor = normalizedRow['valor'] || normalizedRow['preco'] || normalizedRow['price'] || '';
+        const dataCompra = normalizedRow['data_compra'] || normalizedRow['data_entrega'] || '';
+        const observacoes = normalizedRow['observacoes'] || normalizedRow['observacao'] || normalizedRow['obs'] || '';
+
+        // Converter datas se necessário (DD/MM/YYYY para YYYY-MM-DD)
+        if (dataAniversario && typeof dataAniversario === 'string' && dataAniversario.includes('/')) {
+          const parts = dataAniversario.split('/');
+          if (parts.length === 3) {
+            dataAniversario = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
           }
         }
 
-        let dataCompra = null;
-        if (registro.data_compra) {
-          dataCompra = registro.data_compra;
-          if (dataCompra.includes('/')) {
-            const [dia, mes, ano] = dataCompra.split('/');
-            dataCompra = `${ano}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}`;
-          }
-        }
-
-        return {
-          nome_completo: registro.nome_completo,
-          email: registro.email,
-          telefone: registro.telefone,
-          endereco: registro.endereco || null,
+        const clientData = {
+          nome_completo: nome,
+          email: email,
+          telefone: telefone ? String(telefone).replace(/\D/g, '') : '',
           data_aniversario: dataAniversario,
-          produto_servico: registro.produto_servico || null,
-          valor_compra: registro.valor_compra ? parseFloat(registro.valor_compra) : null,
+          endereco: endereco,
+          // Dados da compra
+          produto_servico: produtoServico,
+          valor: valor,
           data_compra: dataCompra,
-          observacoes_compra: registro.observacoes_compra || null,
-          status_importacao: 'pendente'
+          observacoes: observacoes
         };
+
+        console.log(`Cliente processado ${index}:`, clientData);
+        return clientData;
+      }).filter(client => {
+        // Filtrar apenas clientes com dados mínimos
+        const isValid = client.nome_completo && client.email && client.telefone && client.data_aniversario;
+        if (!isValid) {
+          console.warn('Cliente inválido (faltando dados):', client);
+        }
+        return isValid;
       });
 
-      // Inserir na tabela staging
-      const { error: stagingError } = await supabase
-        .from('clientes_compras_staging')
-        .insert(stagingData);
+      console.log('Total de clientes válidos:', clients.length);
+      console.log('Clientes processados:', clients);
 
-      if (stagingError) {
-        throw new Error(`Erro ao inserir na fila: ${stagingError.message}`);
+      if (clients.length === 0) {
+        fileInfo.innerHTML = `<div style="color:#ef4444;">❌ Nenhum registro válido encontrado no arquivo.<br>Verifique se as colunas estão corretas: nome_completo, email, telefone, data_aniversario</div>`;
+        return;
       }
 
-      fileInfo.textContent = 'Processando registros...';
+      fileInfo.innerHTML = `<div style="color:#22c55e;">✓ ${clients.length} registro(s) válido(s) encontrado(s)<br><small style="color:#888;">Processando importação...</small></div>`;
 
-      // Chamar a função que processa o staging
-      const { data: resultado, error: processError } = await supabase
+      // 1. Agrupar por cliente único (email)
+      const clientesUnicos = new Map();
+      const comprasPorCliente = new Map();
+
+      clients.forEach(row => {
+        const email = row.email.toLowerCase().trim();
+
+        // Guardar dados do cliente (apenas uma vez)
+        if (!clientesUnicos.has(email)) {
+          clientesUnicos.set(email, {
+            nome_completo: row.nome_completo,
+            email: row.email,
+            telefone: row.telefone,
+            data_aniversario: row.data_aniversario,
+            endereco: row.endereco
+          });
+          comprasPorCliente.set(email, []);
+        }
+
+        // Guardar compras se tiver dados de compra
+        if (row.produto_servico && row.valor && row.data_compra) {
+          comprasPorCliente.get(email).push({
+            produto_servico: row.produto_servico,
+            valor: parseFloat(row.valor),
+            data_compra: row.data_compra,
+            observacoes: row.observacoes || null
+          });
+        }
+      });
+
+      const totalClientes = clientesUnicos.size;
+      const totalCompras = Array.from(comprasPorCliente.values()).reduce((sum, compras) => sum + compras.length, 0);
+
+      fileInfo.innerHTML = `<div style="color:#FE6E4B;">📊 Identificados:<br>• ${totalClientes} cliente(s) único(s)<br>• ${totalCompras} compra(s)<br><small style="color:#888;">Processando...</small></div>`;
+
+      // 2. Inserir clientes únicos na staging
+      const stagingRecords = Array.from(clientesUnicos.values()).map(client => ({
+        nome_completo: client.nome_completo,
+        email: client.email,
+        telefone: client.telefone,
+        data_aniversario: client.data_aniversario,
+        endereco: client.endereco,
+        status_importacao: 'pendente'
+      }));
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('clientes_compras_staging')
+        .insert(stagingRecords)
+        .select();
+
+      if (insertError) {
+        throw new Error('Erro ao inserir na staging: ' + insertError.message);
+      }
+
+      // 3. Processar clientes usando a função do banco
+      const { data: processResult, error: processError } = await supabase
         .rpc('processar_importacao_staging');
 
       if (processError) {
-        throw new Error(`Erro ao processar importação: ${processError.message}`);
+        throw new Error('Erro ao processar staging: ' + processError.message);
       }
 
-      const { total_registros, processados_sucesso, processados_erro, detalhes } = resultado[0];
+      const result = processResult[0];
+      const clientesImportados = result.processados_sucesso || 0;
+      const clientesComErro = result.processados_erro || 0;
 
-      if (fileInfo) {
-        fileInfo.innerHTML = `
-          <div class="text-green-600 text-xs">✓ ${processados_sucesso} registros importados com sucesso</div>
-          ${processados_erro > 0 ? `<div class="text-red-600 text-xs">✗ ${processados_erro} registros com erro</div>` : ''}
-          <div class="text-gray-600 text-xs">Total processado: ${total_registros}</div>
-        `;
+      // 4. Se há compras, processar após importar clientes
+      let comprasImportadas = 0;
+      let comprasComErro = 0;
+
+      console.log('=== DEBUG COMPRAS ===');
+      console.log('Total de compras identificadas:', totalCompras);
+      console.log('Clientes importados:', clientesImportados);
+      console.log('Compras por cliente:', comprasPorCliente);
+
+      if (totalCompras > 0 && clientesImportados > 0) {
+        fileInfo.innerHTML = `<div style="color:#FE6E4B;">✓ ${clientesImportados} cliente(s) importado(s)<br>Processando ${totalCompras} compra(s)...<br></div>`;
+
+        // Buscar clientes recém-importados para pegar seus IDs
+        const emailsImportados = Array.from(clientesUnicos.keys());
+        console.log('Emails para buscar:', emailsImportados);
+
+        const { data: clientesDB, error: clientesError } = await supabase
+          .from('clientes')
+          .select('id, email')
+          .in('email', emailsImportados);
+
+        console.log('Clientes encontrados no banco:', clientesDB);
+
+        if (clientesError) {
+          console.error('Erro ao buscar clientes:', clientesError);
+          throw new Error('Erro ao buscar clientes: ' + clientesError.message);
+        }
+
+        // Mapear email -> id
+        const emailParaId = new Map();
+        clientesDB.forEach(c => emailParaId.set(c.email.toLowerCase(), c.id));
+        console.log('Mapeamento email -> id:', emailParaId);
+
+        // Preparar compras para inserir
+        const comprasParaInserir = [];
+        comprasPorCliente.forEach((compras, email) => {
+          const clienteId = emailParaId.get(email);
+          console.log(`Cliente ${email} -> ID: ${clienteId}, Compras:`, compras);
+
+          if (clienteId) {
+            compras.forEach(compra => {
+              comprasParaInserir.push({
+                cliente_id: clienteId,
+                produto_servico: compra.produto_servico,
+                valor: compra.valor,
+                data_compra: compra.data_compra,
+                observacoes: compra.observacoes
+              });
+            });
+          } else {
+            console.warn(`Cliente ${email} não encontrado no banco!`);
+          }
+        });
+
+        console.log('Compras preparadas para inserir:', comprasParaInserir);
+        console.log('Total de compras a inserir:', comprasParaInserir.length);
+
+        // Inserir compras em lote
+        if (comprasParaInserir.length > 0) {
+          console.log('Iniciando inserção de compras...');
+          const { data: comprasData, error: comprasError } = await supabase
+            .from('compras')
+            .insert(comprasParaInserir)
+            .select();
+
+          console.log('Resultado da inserção:', { comprasData, comprasError });
+
+          if (comprasError) {
+            console.error('ERRO ao inserir compras:', comprasError);
+            comprasComErro = comprasParaInserir.length;
+            showAlert(`Erro ao importar compras: ${comprasError.message}`, 'error');
+          } else {
+            comprasImportadas = comprasData.length;
+            console.log('Compras importadas com sucesso:', comprasImportadas);
+          }
+        } else {
+          console.warn('Nenhuma compra para inserir!');
+        }
+      } else {
+        console.log('Condição não atendida para processar compras:');
+        console.log('- totalCompras > 0?', totalCompras > 0);
+        console.log('- clientesImportados > 0?', clientesImportados > 0);
       }
 
-      await loadClients();
-      await loadMetrics();
-      showAlert(
-        `Importação concluída: ${processados_sucesso} sucesso, ${processados_erro} erros`, 
-        processados_sucesso > 0 ? 'success' : 'error'
-      );
-      
+      // 5. Mostrar resultados finais
+      if (clientesImportados > 0 || comprasImportadas > 0) {
+        showAlert(`✓ Importação concluída! ${clientesImportados} cliente(s) e ${comprasImportadas} compra(s) importadas.`);
+        await loadMetrics();
+        await loadClients();
+      }
+
+      if (clientesComErro > 0 || comprasComErro > 0) {
+        showAlert(`⚠️ ${clientesComErro} cliente(s) e ${comprasComErro} compra(s) com erro.`, 'error');
+      }
+
+      fileInfo.style.color = (clientesComErro === 0 && comprasComErro === 0) ? '#22c55e' : '#FE6E4B';
+      fileInfo.innerHTML = `
+        <div style="line-height: 1.6;">
+          <strong>📊 Resultado da Importação:</strong><br>
+          ${clientesImportados > 0 ? `✓ <strong>${clientesImportados}</strong> cliente(s) importado(s)<br>` : ''}
+          ${comprasImportadas > 0 ? `✓ <strong>${comprasImportadas}</strong> compra(s) importadas<br>` : ''}
+          ${clientesComErro > 0 ? `✗ <strong>${clientesComErro}</strong> cliente(s) com erro<br>` : ''}
+          ${comprasComErro > 0 ? `✗ <strong>${comprasComErro}</strong> compra(s) com erro<br>` : ''}
+        </div>
+      `;
+
       // Limpar input de arquivo
       e.target.value = '';
+
     } catch (error) {
       console.error('Erro na importação:', error);
       if (fileInfo) {
-        fileInfo.innerHTML = `<div class="text-red-600 text-xs">Erro: ${error.message}</div>`;
+        fileInfo.style.color = '#ef4444';
+        fileInfo.textContent = 'Erro: ' + error.message;
       }
       showAlert('Erro ao processar arquivo: ' + error.message, 'error');
     }
