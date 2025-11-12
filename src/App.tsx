@@ -9,6 +9,8 @@ import Clientes from "./pages/Clientes";
 import Perfil from "./pages/Perfil";
 import Conversas from "./pages/Conversas";
 import Config from "./pages/Config";
+import Mensagens from "./pages/Mensagens";
+import Indicacoes from "./pages/Indicacoes";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -27,6 +29,8 @@ const App = () => (
           <Route path="/perfil" element={<Perfil />} />
           <Route path="/conversas" element={<Conversas />} />
           <Route path="/config" element={<Config />} />
+          <Route path="/mensagens" element={<Mensagens />} />
+          <Route path="/indicacoes" element={<Indicacoes />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
