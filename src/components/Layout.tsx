@@ -176,22 +176,26 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 bg-card border-t border-border z-50 flex items-center justify-around px-2">
-        {navItems.map((item) => {
+      {/* Mobile Bottom Navigation - Show only 5 main items */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-card border-t border-border z-50 flex items-center justify-around px-1 safe-area-pb">
+        {navItems.slice(0, 5).map((item) => {
           const isActive = location.pathname === item.path;
+          // Abreviar labels longos para mobile
+          const shortLabel = item.label === "Configurações" ? "Config" : 
+                            item.label === "Indicações" ? "Indicar" : 
+                            item.label === "Mensagens" ? "Msgs" : item.label;
           return (
             <Link
               key={item.path}
               to={item.path}
-              className={`flex flex-col items-center justify-center gap-1 px-3 py-2 rounded-xl transition-all duration-300 min-w-[70px] ${
+              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg transition-all duration-300 flex-1 max-w-[72px] ${
                 isActive
-                  ? 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-primary'
+                  ? 'bg-primary/20 text-primary'
                   : 'text-muted-foreground'
               }`}
             >
-              {item.icon}
-              <span className="text-xs font-medium">{item.label}</span>
+              <div className="w-5 h-5">{item.icon}</div>
+              <span className="text-[10px] font-medium mt-1 truncate w-full text-center">{shortLabel}</span>
             </Link>
           );
         })}
