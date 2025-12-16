@@ -62,22 +62,40 @@ const Mensagens = () => {
     if (!supabase) return;
 
     try {
-      const { data, error } = await supabase
+      // Buscar mensagens
+      const { data: mensagensData, error: mensagensError } = await supabase
         .from('mensagens')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (mensagensError) throw mensagensError;
+
+      // Buscar clientes para obter os nomes corretos
+      const { data: clientesData, error: clientesError } = await supabase
+        .from('clientes')
+        .select('id, nome_completo, telefone');
+
+      if (clientesError) throw clientesError;
+
+      // Criar mapa de clientes para acesso rápido
+      const clientesMap = (clientesData || []).reduce((acc: Record<string, { nome: string; telefone: string }>, cliente: any) => {
+        acc[cliente.id] = {
+          nome: cliente.nome_completo || '',
+          telefone: cliente.telefone || ''
+        };
+        return acc;
+      }, {});
 
       // Agrupar mensagens por cliente
-      const groupedByClient = (data || []).reduce((acc: Record<string, ClienteConversas>, msg: Message) => {
+      const groupedByClient = (mensagensData || []).reduce((acc: Record<string, ClienteConversas>, msg: Message) => {
         const clienteId = msg.cliente_id;
+        const clienteInfo = clientesMap[clienteId];
         
         if (!acc[clienteId]) {
           acc[clienteId] = {
             clienteId,
-            nomeCliente: msg.nomewpp || 'Cliente Desconhecido',
-            telefone: msg.telefone || '',
+            nomeCliente: clienteInfo?.nome || msg.nomewpp || 'Cliente Desconhecido',
+            telefone: clienteInfo?.telefone || msg.telefone || '',
             ultimaMensagem: msg.bot_message || msg.user_message || '',
             ultimaData: msg.created_at,
             totalMensagens: 0,
