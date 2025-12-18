@@ -322,7 +322,7 @@ window.initDashboardLogic = function() {
                 <svg class="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
                 </svg>
-                <span>Desde ${new Date(client.created_at).toLocaleDateString('pt-BR')}</span>
+                <span>Desde ${client.data_cadastro ? new Date(client.data_cadastro).toLocaleDateString('pt-BR') : 'Não informado'}</span>
               </div>
             </div>
           </div>
