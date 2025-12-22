@@ -1,21 +1,31 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase"; // Importação do cliente
 import { toast } from "sonner";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // Hook de navegação
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // Função de Logout
+  // --- FUNÇÃO DE LOGOUT CORRIGIDA ---
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      toast.error("Erro ao sair");
-    } else {
+    try {
+      // Tenta fazer logout no servidor
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.warn("Aviso no logout:", error.message);
+      }
+    } catch (error) {
+      console.error("Erro de rede no logout:", error);
+    } finally {
+      // INDEPENDENTE do que acontecer acima (erro 403, sem internet, etc)
+      // Nós limpamos o navegador e mandamos para o login
       navigate("/login");
+      
+      // Opcional: Forçar recarregamento para limpar estados de memória
+      // window.location.href = "/login"; 
     }
   };
 
@@ -131,7 +141,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           {/* Header */}
           <div className="h-20 border-b border-border flex items-center justify-between px-6">
             {isSidebarOpen && (
-              <h1 className="text-xl font-bold gradient-text">Painel de clientes</h1>
+              <h1 className="text-xl font-bold gradient-text">Metricare</h1>
             )}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
