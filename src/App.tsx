@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 
 // Páginas
 import Login from "./pages/Login";
-import Cadastro from "./pages/Cadastro"; // Certifique-se de que este import existe
+import Cadastro from "./pages/Cadastro"; // Certifique-se de ter criado este arquivo
 import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import Perfil from "./pages/Perfil";
@@ -20,7 +20,8 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
-// Este componente vigia a autenticação DENTRO do Router
+// --- COMPONENTE VIGIA (NOVO) ---
+// Este componente monitora se a sessão morreu e redireciona automaticamente
 const AuthObserver = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -29,16 +30,16 @@ const AuthObserver = () => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
 
-      // Lista de rotas públicas (que não precisam de login)
+      // Rotas que não precisam de login
       const publicRoutes = ['/login', '/cadastro'];
       const isPublicRoute = publicRoutes.includes(location.pathname);
 
-      // 1. Se NÃO tem sessão e tenta acessar página privada -> Manda para Login
+      // 1. Se NÃO tem sessão e tenta acessar área restrita -> Manda pro Login
       if (!session && !isPublicRoute) {
         navigate('/login');
       }
 
-      // 2. Se TEM sessão e tenta acessar página pública (Login/Cadastro) -> Manda para Dashboard
+      // 2. Se TEM sessão e tenta acessar Login/Cadastro -> Manda pro Dashboard
       if (session && isPublicRoute) {
         navigate('/dashboard');
       }
@@ -46,20 +47,23 @@ const AuthObserver = () => {
 
     checkAuth();
 
-    // Escuta mudanças (Login/Logout em tempo real)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      const publicRoutes = ['/login', '/cadastro'];
-      const isPublicRoute = publicRoutes.includes(location.pathname);
-
-      if (!session && !isPublicRoute) {
-        navigate('/login');
+    // Escuta mudanças em tempo real (ex: token expirou, logout em outra aba)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
+        const publicRoutes = ['/login', '/cadastro'];
+        const isPublicRoute = publicRoutes.includes(location.pathname);
+        
+        // Só redireciona se já não estiver em rota pública
+        if (!isPublicRoute) {
+          navigate('/login');
+        }
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate, location]);
 
-  return null; 
+  return null; // Não renderiza nada visualmente
 };
 
 const App = () => (
@@ -68,16 +72,16 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        
+        {/* O AuthObserver deve ficar AQUI, dentro do BrowserRouter */}
         <AuthObserver />
         
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           
-          {/* Rotas Públicas */}
           <Route path="/login" element={<Login />} />
           <Route path="/cadastro" element={<Cadastro />} />
           
-          {/* Rotas Privadas (Protegidas pelo AuthObserver) */}
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/perfil" element={<Perfil />} />
