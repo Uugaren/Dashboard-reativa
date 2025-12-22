@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase"; // <--- A MUDANÇA MÁGICA É ESSA IMPORTAÇÃO
+import { supabase } from "@/lib/supabase";
 
 const Config = () => {
   const [notifications, setNotifications] = useState(true);
@@ -22,7 +22,6 @@ const Config = () => {
   const checkConnection = async () => {
     setConnectionStatus('checking');
     try {
-      // Verifica a sessão atual
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
@@ -50,50 +49,80 @@ const Config = () => {
     toast.success(newValue ? 'Atualização automática ativada' : 'Atualização automática desativada');
   };
 
+  // --- FUNÇÃO DE SEGURANÇA PARA CSV ---
+  const processCsvField = (data: any): string => {
+    if (data === null || data === undefined) return '';
+    
+    let stringData = String(data);
+
+    // 1. Prevenir Injeção de Fórmula (CSV Injection)
+    // Se começar com =, +, - ou @, adiciona um apóstrofo para forçar texto
+    if (/^[=+\-@]/.test(stringData)) {
+      stringData = "'" + stringData;
+    }
+
+    // 2. Escapar Aspas Duplas (RFC 4180)
+    // Se tiver aspas, substitui " por ""
+    if (stringData.includes('"')) {
+      stringData = stringData.replace(/"/g, '""');
+    }
+
+    // 3. Envolver em aspas se tiver vírgula, quebra de linha ou aspas
+    if (stringData.search(/("|,|\n|\r)/g) >= 0) {
+      stringData = `"${stringData}"`;
+    }
+
+    return stringData;
+  };
+
   const handleExportData = async () => {
     try {
-      toast.info('Exportando dados...');
+      toast.info('Gerando arquivo seguro...');
       
-      // Busca dados usando a conexão autenticada global
       const { data: clientes, error: errClientes } = await supabase
         .from('clientes')
         .select('*')
         .order('id');
 
-      const { data: compras, error: errCompras } = await supabase
-        .from('compras')
-        .select('*')
-        .order('id');
+      if (errClientes) throw new Error("Falha ao buscar dados");
 
-      if (errClientes || errCompras) throw new Error("Falha ao buscar dados");
-
-      if ((!clientes || clientes.length === 0) && (!compras || compras.length === 0)) {
+      if (!clientes || clientes.length === 0) {
         toast.warning('Nenhum dado encontrado para exportar');
         return;
       }
 
-      // Criar CSV de clientes
-      const csvClientes = [
-        'ID,Nome,Email,Telefone,Endereço,Ativo',
-        ...(clientes || []).map(c => 
-          `${c.id},"${c.nome_completo}","${c.email || ''}","${c.telefone || ''}","${c.endereco || ''}",${c.ativo}`
-        )
+      // Cabeçalho do CSV
+      const headers = ['ID', 'Nome', 'Email', 'Telefone', 'Endereço', 'Ativo', 'Criado em'];
+      
+      // Conteúdo processado com segurança
+      const csvContent = [
+        headers.join(','),
+        ...clientes.map(c => [
+          processCsvField(c.id),
+          processCsvField(c.nome_completo),
+          processCsvField(c.email),
+          processCsvField(c.telefone),
+          processCsvField(c.endereco),
+          processCsvField(c.ativo ? 'Sim' : 'Não'),
+          processCsvField(c.created_at)
+        ].join(','))
       ].join('\n');
 
       const downloadCSV = (content: string, filename: string) => {
-        const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+        // Adiciona BOM para o Excel reconhecer acentuação UTF-8 corretamente
+        const blob = new Blob(["\uFEFF" + content], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
         link.download = filename;
         link.click();
       };
 
-      downloadCSV(csvClientes, `clientes_export_${new Date().toISOString().split('T')[0]}.csv`);
-      toast.success('Dados exportados com sucesso!');
+      downloadCSV(csvContent, `clientes_export_seguro_${new Date().toISOString().split('T')[0]}.csv`);
+      toast.success('Dados exportados com segurança!');
       
     } catch (error) {
       console.error('Erro ao exportar:', error);
-      toast.error('Erro ao exportar dados. Verifique se você tem permissão.');
+      toast.error('Erro ao exportar dados.');
     }
   };
 
@@ -137,7 +166,7 @@ const Config = () => {
                <div className="p-4 bg-muted/30 rounded-xl flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold mb-1">Exportar Dados</h3>
-                    <p className="text-sm text-muted-foreground">Baixar CSV dos seus clientes</p>
+                    <p className="text-sm text-muted-foreground">Baixar CSV seguro dos seus clientes</p>
                   </div>
                   <button 
                     onClick={handleExportData}
@@ -149,7 +178,6 @@ const Config = () => {
             </div>
           </div>
           
-          {/* Outras configs visuais mantidas */}
           <div className="glass rounded-2xl p-8 animate-slide-in" style={{ animationDelay: '0.1s' }}>
              <h2 className="text-2xl font-bold mb-6">Preferências de Interface</h2>
              <div className="space-y-4">
@@ -160,6 +188,17 @@ const Config = () => {
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" checked={notifications} onChange={handleNotificationsToggle} />
+                    <div className="w-11 h-6 bg-muted peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                  </label>
+                </div>
+                
+                <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
+                  <div>
+                    <h3 className="font-semibold mb-1">Atualização Automática</h3>
+                    <p className="text-sm text-muted-foreground">Recarregar dados em tempo real</p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" className="sr-only peer" checked={autoUpdate} onChange={handleAutoUpdateToggle} />
                     <div className="w-11 h-6 bg-muted peer-focus:ring-4 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                   </label>
                 </div>

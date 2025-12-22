@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
+import Papa from "papaparse"; // <--- IMPORTANTE: Usando biblioteca robusta
 
 // Interfaces
 interface Cliente {
@@ -12,8 +13,9 @@ interface Cliente {
   telefone: string;
   endereco?: string;
   data_aniversario?: string;
-  data_cadastro?: string; // Adicionado para o footer do card
+  data_cadastro?: string; 
   ativo: boolean;
+  created_at: string;
 }
 
 const Clientes = () => {
@@ -57,7 +59,7 @@ const Clientes = () => {
     }
   };
 
-  // --- FUNÇÕES DE HELPER VISUAL (IGUAL AO ORIGINAL) ---
+  // --- HELPERS ---
   const highlightText = (text: string) => {
     if (!searchTerm || !text) return text;
     const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'));
@@ -70,12 +72,13 @@ const Clientes = () => {
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return 'Não informado';
-    // Corrige fuso horário adicionando T00:00:00 se for apenas data YYYY-MM-DD
     const dateToFormat = dateString.includes('T') ? dateString : `${dateString}T00:00:00`;
     return new Date(dateToFormat).toLocaleDateString('pt-BR');
   };
 
-  // --- HANDLERS (CADASTRO, COMPRA, IMPORTAÇÃO) ---
+  const getInitials = (n: string) => n ? n.charAt(0).toUpperCase() : '?';
+
+  // --- HANDLERS (CADASTRO MANUAL) ---
   const handleRegisterClient = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -130,57 +133,101 @@ const Clientes = () => {
     }
   };
 
+  // --- IMPORTAÇÃO ROBUSTA COM PAPAPARSE ---
   const handleImport = async () => {
     const file = fileInputRef.current?.files?.[0];
     if (!file) return toast.error("Selecione um arquivo CSV");
     
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const text = e.target?.result as string;
-      if (!text) return;
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-      
-      const idx = {
-        nome: headers.findIndex(h => h.includes('nome')),
-        email: headers.findIndex(h => h.includes('email')),
-        tel: headers.findIndex(h => h.includes('tele') || h.includes('cel')),
-        end: headers.findIndex(h => h.includes('end')),
-        niver: headers.findIndex(h => h.includes('aniver')),
-        prod: headers.findIndex(h => h.includes('prod')),
-        valor: headers.findIndex(h => h.includes('valor')),
-        data: headers.findIndex(h => h.includes('data'))
-      };
+    toast.loading("Lendo arquivo...");
 
-      if (idx.nome === -1) return toast.error("CSV sem coluna de Nome");
-      toast.loading("Importando...");
-      let sucessos = 0;
+    Papa.parse(file, {
+      header: true, // Usa a primeira linha como cabeçalho
+      skipEmptyLines: true,
+      encoding: "UTF-8",
+      complete: async (results) => {
+        const rows = results.data as Record<string, string>[];
+        
+        if (rows.length === 0) {
+          toast.dismiss();
+          return toast.error("O arquivo CSV parece estar vazio ou inválido.");
+        }
 
-      for (let i = 1; i < lines.length; i++) {
-        if (!lines[i].trim()) continue;
-        const row = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.trim().replace(/^"|"$/g, ''));
-        if (row.length < 2) continue;
-
-        try {
-          await supabase.rpc('importar_cliente_compra', {
-            p_nome_completo: row[idx.nome],
-            p_email: idx.email !== -1 && row[idx.email] ? row[idx.email] : `no_email_${Date.now()}_${i}@sys.local`,
-            p_telefone: idx.tel !== -1 ? row[idx.tel] : '',
-            p_endereco: idx.end !== -1 ? row[idx.end] : '',
-            p_data_aniversario: idx.niver !== -1 ? row[idx.niver] : null,
-            p_produto_servico: idx.prod !== -1 ? row[idx.prod] : null,
-            p_valor_compra: idx.valor !== -1 ? parseFloat(row[idx.valor]) : null,
-            p_data_compra: idx.data !== -1 ? row[idx.data] : null
+        // Normalização das chaves do cabeçalho (lowercase, trim) para facilitar o match
+        const normalizedRows = rows.map(row => {
+          const newRow: Record<string, string> = {};
+          Object.keys(row).forEach(key => {
+            newRow[key.trim().toLowerCase()] = row[key];
           });
-          sucessos++;
-        } catch (err) { console.error(err); }
+          return newRow;
+        });
+
+        // Tenta encontrar as chaves corretas baseadas em palavras-chave
+        const firstRow = normalizedRows[0];
+        const keys = Object.keys(firstRow);
+        
+        const keyMap = {
+          nome: keys.find(k => k.includes('nome')),
+          email: keys.find(k => k.includes('email')),
+          tel: keys.find(k => k.includes('tele') || k.includes('cel') || k.includes('phone')),
+          end: keys.find(k => k.includes('end') || k.includes('rua') || k.includes('addr')),
+          niver: keys.find(k => k.includes('aniver') || k.includes('nasc')),
+          prod: keys.find(k => k.includes('prod') || k.includes('serv')),
+          valor: keys.find(k => k.includes('valor') || k.includes('preço') || k.includes('price')),
+          data: keys.find(k => k.includes('data') && (k.includes('compra') || k.includes('venda')))
+        };
+
+        if (!keyMap.nome) {
+          toast.dismiss();
+          return toast.error("Não foi possível encontrar a coluna 'Nome' no CSV.");
+        }
+
+        toast.loading(`Importando ${normalizedRows.length} registros...`);
+        let sucessos = 0;
+
+        for (let i = 0; i < normalizedRows.length; i++) {
+          const row = normalizedRows[i];
+          
+          // Tratamento de valores
+          const nome = row[keyMap.nome!];
+          if (!nome) continue; // Pula se não tiver nome
+
+          // Email: se não tiver, gera um fake único para não quebrar a constraint
+          const email = keyMap.email && row[keyMap.email] ? row[keyMap.email] : `no_email_${Date.now()}_${i}@sys.local`;
+          
+          // Valor: trata R$ e vírgulas
+          let valorNumerico = null;
+          if (keyMap.valor && row[keyMap.valor]) {
+            const valStr = row[keyMap.valor].replace(/[R$\s]/g, '').replace(',', '.');
+            valorNumerico = parseFloat(valStr);
+          }
+
+          try {
+            await supabase.rpc('importar_cliente_compra', {
+              p_nome_completo: nome,
+              p_email: email,
+              p_telefone: keyMap.tel ? row[keyMap.tel] : '',
+              p_endereco: keyMap.end ? row[keyMap.end] : '',
+              p_data_aniversario: keyMap.niver ? row[keyMap.niver] : null,
+              p_produto_servico: keyMap.prod ? row[keyMap.prod] : null,
+              p_valor_compra: valorNumerico || null,
+              p_data_compra: keyMap.data ? row[keyMap.data] : null
+            });
+            sucessos++;
+          } catch (err) {
+            console.error(`Erro na linha ${i + 2}`, err);
+          }
+        }
+
+        toast.dismiss();
+        toast.success(`${sucessos} registros importados com sucesso!`);
+        fetchClientes();
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      },
+      error: (error) => {
+        toast.dismiss();
+        toast.error(`Erro ao ler CSV: ${error.message}`);
       }
-      toast.dismiss();
-      toast.success(`${sucessos} linhas processadas`);
-      fetchClientes();
-      if(fileInputRef.current) fileInputRef.current.value = "";
-    };
-    reader.readAsText(file);
+    });
   };
 
   const handleDelete = async () => {
@@ -207,7 +254,7 @@ const Clientes = () => {
     fetchClientes();
   };
 
-  // --- FILTROS ---
+  // Filtros
   const filteredList = clientes.filter(c => 
     c.nome_completo.toLowerCase().includes(searchTerm.toLowerCase()) || 
     c.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -269,7 +316,7 @@ const Clientes = () => {
                 {showClientDropdown && purchaseSearch.length > 0 && (
                   <div className="absolute z-10 w-full mt-2 max-h-48 overflow-y-auto glass rounded-xl z-20 bg-background border border-border shadow-lg">
                     {clientes.filter(c => c.nome_completo.toLowerCase().includes(purchaseSearch.toLowerCase())).map(c => (
-                      <div key={c.id} className="p-3 hover:bg-muted cursor-pointer border-b border-border/50 last:border-0" onClick={() => { setSelectedClientForPurchase(c); setPurchaseSearch(c.nome_completo); setShowClientDropdown(false); }}>
+                      <div key={c.id} onClick={() => { setSelectedClientForPurchase(c); setPurchaseSearch(c.nome_completo); setShowClientDropdown(false); }} className="p-3 hover:bg-muted cursor-pointer border-b border-border/50">
                         <div className="font-semibold">{c.nome_completo}</div><div className="text-xs text-muted-foreground">{c.email}</div>
                       </div>
                     ))}
@@ -278,8 +325,8 @@ const Clientes = () => {
               </div>
               {selectedClientForPurchase && (
                 <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-primary">{selectedClientForPurchase.nome_completo.charAt(0).toUpperCase()}</div>
-                  <div><div className="font-semibold text-foreground">{selectedClientForPurchase.nome_completo}</div><div className="text-xs text-muted-foreground">{selectedClientForPurchase.email}</div></div>
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-primary">{getInitials(selectedClientForPurchase.nome_completo)}</div>
+                  <div><div className="font-semibold">{selectedClientForPurchase.nome_completo}</div><div className="text-xs text-muted-foreground">{selectedClientForPurchase.email}</div></div>
                 </div>
               )}
               <div><label className="block text-sm font-semibold mb-2">Produto*</label><input name="produtoComprado" type="text" required className="w-full px-4 py-3 bg-input border border-border rounded-xl" /></div>
@@ -304,7 +351,7 @@ const Clientes = () => {
           </div>
         </div>
 
-        {/* CLIENT LIST (Restaurada para o Design Original) */}
+        {/* Client List */}
         <div className="glass rounded-2xl p-8 animate-fade-in">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
             <h2 className="text-2xl font-bold flex items-center gap-3">
@@ -336,16 +383,13 @@ const Clientes = () => {
                     <div className="relative">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          {/* Avatar */}
                           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center font-bold text-lg text-primary">
-                            {client.nome_completo.charAt(0).toUpperCase()}
+                            {getInitials(client.nome_completo)}
                           </div>
                           <div>
-                            {/* Nome */}
                             <div className="client-name text-foreground font-bold text-lg mb-1">
                               {highlightText(client.nome_completo)}
                             </div>
-                            {/* Status */}
                             <div className="flex items-center gap-2">
                               <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${client.ativo ? 'bg-primary/10 text-primary' : 'bg-red-500/10 text-red-500'}`}>
                                 {client.ativo ? 'Ativo' : 'Inativo'}
@@ -353,8 +397,6 @@ const Clientes = () => {
                             </div>
                           </div>
                         </div>
-                        
-                        {/* Botões de Ação */}
                         <div className="flex flex-col gap-2 min-w-[100px]">
                           <button 
                             className="px-3 py-2 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-2 border border-accent/20 w-full"
@@ -379,37 +421,30 @@ const Clientes = () => {
                           </button>
                         </div>
                       </div>
-
-                      {/* Info Grid */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                          <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 00-2-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                           <span className="truncate">{highlightText(client.email)}</span>
                         </div>
                         <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <svg className="w-4 h-4 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+                          <svg className="w-4 h-4 text-accent flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                           <span>{highlightText(client.telefone)}</span>
                         </div>
                         {client.endereco && (
                           <div className="flex items-center gap-2 text-sm text-muted-foreground md:col-span-2">
-                            <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                            </svg>
+                            <svg className="w-4 h-4 text-primary flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                             <span className="truncate">{highlightText(client.endereco)}</span>
                           </div>
                         )}
                       </div>
-
-                      {/* Footer */}
                       <div className="flex items-center justify-between pt-4 border-t border-border/50">
                         <div className="flex items-center gap-4 text-xs text-muted-foreground">
                           <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>
+                            <svg className="w-3.5 h-3.5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg>
                             <span>{formatDate(client.data_aniversario)}</span>
                           </div>
                           <div className="flex items-center gap-1.5">
-                            <svg className="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            <svg className="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                             <span>Desde {formatDate(client.data_cadastro || client.created_at)}</span>
                           </div>
                         </div>
@@ -425,7 +460,7 @@ const Clientes = () => {
             <div id="paginationInfo" className="text-sm text-muted-foreground font-semibold">
               Mostrando {Math.min((currentPage - 1) * itemsPerPage + 1, filteredList.length)} a {Math.min(currentPage * itemsPerPage, filteredList.length)} de {filteredList.length}
             </div>
-            <div id="paginationControls" className="flex items-center gap-2">
+            <div className="flex gap-2">
               <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="p-2 border border-border rounded-lg disabled:opacity-50 hover:bg-muted">&lt;</button>
               <button disabled={currentPage === totalPages || totalPages === 0} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="p-2 border border-border rounded-lg disabled:opacity-50 hover:bg-muted">&gt;</button>
             </div>
