@@ -141,7 +141,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           {/* Header */}
           <div className="h-20 border-b border-border flex items-center justify-between px-6">
             {isSidebarOpen && (
-              <h1 className="text-xl font-bold gradient-text">Metricare</h1>
+              <h1 className="text-xl font-bold gradient-text">Painel de Clientes</h1>
             )}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
