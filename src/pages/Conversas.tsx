@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+// 1. ADICIONEI 'useNavigate' AQUI
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import Layout from "@/components/Layout";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
+// 2. ADICIONEI A IMPORTAÇÃO DO TOAST AQUI
+import { toast } from "sonner";
 
 const Conversas = () => {
   const [searchParams] = useSearchParams();
   const clientId = searchParams.get("id");
+  // 3. ADICIONEI A DEFINIÇÃO DO NAVIGATE AQUI
+  const navigate = useNavigate();
+  
   const [client, setClient] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,16 +25,14 @@ const Conversas = () => {
   const loadConversations = async () => {
     setLoading(true);
     try {
-      const supabaseUrl = localStorage.getItem('supabaseUrl');
-      const supabaseKey = localStorage.getItem('supabaseKey');
-      
-      if (!supabaseUrl || !supabaseKey) {
-        throw new Error('Supabase não está conectado');
+      // Verifica sessão
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/login"); // Agora vai funcionar
+        return;
       }
 
-      const supabase = createClient(supabaseUrl, supabaseKey);
-
-      // Load client data
+      // Carrega dados do cliente (RLS filtrará automaticamente)
       const { data: clientData, error: clientError } = await supabase
         .from('clientes')
         .select('*')
@@ -38,7 +42,7 @@ const Conversas = () => {
       if (clientError) throw clientError;
       setClient(clientData);
 
-      // Load messages
+      // Carrega mensagens
       const { data: messagesData, error: messagesError } = await supabase
         .from('mensagens')
         .select('*')
@@ -49,6 +53,7 @@ const Conversas = () => {
       setMessages(messagesData || []);
     } catch (error) {
       console.error("Erro ao carregar conversas:", error);
+      toast.error("Erro ao carregar dados"); // Agora vai funcionar
     } finally {
       setLoading(false);
     }

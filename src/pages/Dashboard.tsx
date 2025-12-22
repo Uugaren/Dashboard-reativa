@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
+import { supabase } from "@/lib/supabase"; // <--- Conexão corrigida
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const Dashboard = () => {
@@ -10,122 +11,108 @@ const Dashboard = () => {
   const [salesOverTime, setSalesOverTime] = useState<any[]>([]);
   const [totalMensagens, setTotalMensagens] = useState(0);
   const [totalIndicacoes, setTotalIndicacoes] = useState(0);
+  const [totalClientes, setTotalClientes] = useState(0);
+  const [clientesAtivos, setClientesAtivos] = useState(0);
 
   useEffect(() => {
-    // Initialize dashboard logic for metrics
-    if ((window as any).initDashboardLogic) {
-      (window as any).initDashboardLogic();
-    }
-
-    // Load chart data
     loadChartData();
   }, []);
 
   const loadChartData = async () => {
-    const supabase = (window as any).supabaseClient;
-    if (!supabase) return;
-
+    // Não usamos mais (window as any).supabaseClient
+    
     try {
-      // Top 10 clientes por valor total gasto
-      const { data: spendersData } = await supabase
+      // 1. Buscando métricas gerais de Clientes
+      const { data: clientesData } = await supabase
         .from('clientes')
-        .select('nome_completo, id')
-        .order('id', { ascending: true });
+        .select('id, nome_completo, ativo');
+      
+      const total = clientesData?.length || 0;
+      const ativos = clientesData?.filter(c => c.ativo).length || 0;
+      
+      setTotalClientes(total);
+      setClientesAtivos(ativos);
 
-      // Calcular total gasto por cliente
+      // 2. Buscando dados de Compras para gráficos
       const { data: comprasData } = await supabase
         .from('compras')
-        .select('cliente_id, valor');
+        .select('cliente_id, valor, data_compra');
 
+      // Processamento dos Top Spenders e Ticket Médio
       const clienteGastos = new Map();
+      const clienteQtdCompras = new Map();
+
       comprasData?.forEach((compra: any) => {
-        const atual = clienteGastos.get(compra.cliente_id) || 0;
-        clienteGastos.set(compra.cliente_id, atual + parseFloat(compra.valor || 0));
+        const atualValor = clienteGastos.get(compra.cliente_id) || 0;
+        clienteGastos.set(compra.cliente_id, atualValor + parseFloat(compra.valor || 0));
+
+        const atualQtd = clienteQtdCompras.get(compra.cliente_id) || 0;
+        clienteQtdCompras.set(compra.cliente_id, atualQtd + 1);
       });
 
-      const spendersWithTotal = spendersData?.map(c => ({
+      // Mapear IDs para Nomes
+      const spendersWithTotal = clientesData?.map(c => ({
         nome: c.nome_completo,
-        valor: clienteGastos.get(c.id) || 0
-      })).filter(c => c.valor > 0).sort((a, b) => b.valor - a.valor).slice(0, 10);
+        valor: clienteGastos.get(c.id) || 0,
+        quantidade: clienteQtdCompras.get(c.id) || 0
+      })).filter(c => c.valor > 0);
 
-      setTopSpenders(spendersWithTotal?.map(c => ({
+      // Top 10 Valor
+      setTopSpenders(spendersWithTotal?.sort((a, b) => b.valor - a.valor).slice(0, 10).map(c => ({
         nome: c.nome.split(' ')[0],
         valor: c.valor
       })) || []);
 
-      // Top 10 clientes por ticket médio
-      const ticketMedioData = spendersData?.map(c => {
-        const comprasCliente = comprasData?.filter((comp: any) => comp.cliente_id === c.id);
-        const totalGasto = clienteGastos.get(c.id) || 0;
-        const qtdCompras = comprasCliente?.length || 0;
-        return {
-          nome: c.nome_completo,
-          ticketMedio: qtdCompras > 0 ? totalGasto / qtdCompras : 0
-        };
-      }).filter(c => c.ticketMedio > 0).sort((a, b) => b.ticketMedio - a.ticketMedio).slice(0, 10);
-
-      setTopTicket(ticketMedioData?.map(c => ({
+      // Top 10 Ticket Médio
+      setTopTicket(spendersWithTotal?.map(c => ({
         nome: c.nome.split(' ')[0],
-        valor: c.ticketMedio
-      })) || []);
+        valor: c.valor / c.quantidade
+      })).sort((a, b) => b.valor - a.valor).slice(0, 10) || []);
 
-      // Top 10 clientes por quantidade de compras
-      const purchasesCountData = spendersData?.map(c => {
-        const comprasCliente = comprasData?.filter((comp: any) => comp.cliente_id === c.id);
-        return {
-          nome: c.nome_completo,
-          quantidade: comprasCliente?.length || 0
-        };
-      }).filter(c => c.quantidade > 0).sort((a, b) => b.quantidade - a.quantidade).slice(0, 10);
-
-      setTopPurchases(purchasesCountData?.map(c => ({
+      // Top 10 Quantidade
+      setTopPurchases(spendersWithTotal?.sort((a, b) => b.quantidade - a.quantidade).slice(0, 10).map(c => ({
         nome: c.nome.split(' ')[0],
         quantidade: c.quantidade
       })) || []);
 
-      // Vendas ao longo do tempo (últimos 30 dias)
-      const { data: salesData } = await supabase
-        .from('compras')
-        .select('data_compra, valor')
-        .gte('data_compra', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
-        .order('data_compra', { ascending: true });
-
-      // Agrupar vendas por dia
+      // Vendas ao longo do tempo (30 dias)
+      const trintaDiasAtras = new Date();
+      trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
+      
+      const vendasRecentes = comprasData?.filter((c: any) => new Date(c.data_compra) >= trintaDiasAtras) || [];
+      
       const salesByDay: Record<string, number> = {};
-      salesData?.forEach((sale: any) => {
+      vendasRecentes.forEach((sale: any) => {
         const date = new Date(sale.data_compra + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         salesByDay[date] = (salesByDay[date] || 0) + parseFloat(sale.valor || 0);
       });
 
       setSalesOverTime(Object.entries(salesByDay).map(([data, valor]) => ({
         data,
-        valor: parseFloat(valor.toFixed(2))
+        valor: parseFloat(Number(valor).toFixed(2))
       })));
 
-      // Buscar total de mensagens
+      // Totais de Mensagens e Indicações
       const { count: mensagensCount } = await supabase
         .from('mensagens')
         .select('*', { count: 'exact', head: true });
       setTotalMensagens(mensagensCount || 0);
 
-      // Buscar total de indicações
       const { count: indicacoesCount } = await supabase
         .from('indicacoes')
         .select('*', { count: 'exact', head: true });
       setTotalIndicacoes(indicacoesCount || 0);
 
     } catch (error) {
-      console.error('Erro ao carregar dados dos gráficos:', error);
+      console.error('Erro ao carregar dados:', error);
     }
   };
 
   return (
     <Layout>
-      {/* Alert Container */}
       <div id="alertContainer" className="fixed top-4 right-4 z-50 max-w-md w-full"></div>
       
       <div className="container mx-auto px-6 py-12">
-        {/* Header */}
         <div className="mb-12 animate-fade-in">
           <h1 className="text-4xl font-bold mb-3">
             <span className="gradient-text">Dashboard</span> de Métricas
@@ -135,9 +122,7 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Total Clientes */}
           <Link to="/clientes" className="block">
             <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer relative" style={{ animationDelay: '0.1s' }}>
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -149,13 +134,12 @@ const Dashboard = () => {
                     </svg>
                   </div>
                 </div>
-                <div className="text-4xl font-bold mb-2 text-foreground" id="totalClientes">0</div>
+                <div className="text-4xl font-bold mb-2 text-foreground">{totalClientes}</div>
                 <div className="text-sm font-semibold text-muted-foreground">Total de Clientes</div>
               </div>
             </div>
           </Link>
 
-          {/* Clientes Ativos */}
           <Link to="/clientes" className="block">
             <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer" style={{ animationDelay: '0.2s' }}>
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -167,13 +151,12 @@ const Dashboard = () => {
                     </svg>
                   </div>
                 </div>
-                <div className="text-4xl font-bold mb-2 text-foreground" id="clientesAtivos">0</div>
+                <div className="text-4xl font-bold mb-2 text-foreground">{clientesAtivos}</div>
                 <div className="text-sm font-semibold text-muted-foreground">Clientes Ativos</div>
               </div>
             </div>
           </Link>
 
-          {/* Total Mensagens */}
           <Link to="/mensagens" className="block">
             <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer relative" style={{ animationDelay: '0.3s' }}>
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -191,7 +174,6 @@ const Dashboard = () => {
             </div>
           </Link>
 
-          {/* Indicações Obtidas */}
           <Link to="/indicacoes" className="block">
             <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer relative" style={{ animationDelay: '0.4s' }}>
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -210,7 +192,6 @@ const Dashboard = () => {
           </Link>
         </div>
 
-        {/* Charts Grid */}
         <div className="mt-12 space-y-8">
           {/* Top Spenders */}
           <div className="glass rounded-2xl p-8 animate-fade-in">
@@ -240,9 +221,7 @@ const Dashboard = () => {
             </ResponsiveContainer>
           </div>
 
-          {/* Two Column Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Top Ticket Médio */}
             <div className="glass rounded-2xl p-8 animate-fade-in">
               <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20 flex items-center justify-center">
@@ -270,7 +249,6 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </div>
 
-            {/* Top Quantidade de Compras */}
             <div className="glass rounded-2xl p-8 animate-fade-in">
               <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
@@ -312,7 +290,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Sales Over Time */}
           <div className="glass rounded-2xl p-8 animate-fade-in">
             <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20 flex items-center justify-center">

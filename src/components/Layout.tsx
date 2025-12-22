@@ -1,21 +1,25 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
+  // Função de Logout
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Erro ao sair");
+    } else {
+      navigate("/login");
+    }
+  };
+
   const navItems = [
-    {
-      path: "/login",
-      label: "Conexão",
-      icon: (
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
-        </svg>
-      )
-    },
     {
       path: "/dashboard",
       label: "Dashboard",
@@ -108,6 +112,16 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               </Link>
             );
           })}
+          {/* Botão de Logout Mobile */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-4 px-4 py-3 rounded-xl text-red-500 hover:bg-red-500/10 transition-all duration-300 mt-4 border-t border-border pt-4"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+            <span className="font-semibold text-sm">Sair do Sistema</span>
+          </button>
         </nav>
       </aside>
 
@@ -117,7 +131,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           {/* Header */}
           <div className="h-20 border-b border-border flex items-center justify-between px-6">
             {isSidebarOpen && (
-              <h1 className="text-xl font-bold gradient-text">Painel de Clientes</h1>
+              <h1 className="text-xl font-bold gradient-text">Painel de clientes</h1>
             )}
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -148,6 +162,18 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                 </Link>
               );
             })}
+            
+            {/* Botão de Logout Desktop */}
+            <button
+              onClick={handleLogout}
+              className={`w-full flex items-center gap-4 px-4 py-3 rounded-xl text-red-500 hover:bg-red-500/10 transition-all duration-300 mt-2 ${!isSidebarOpen && 'justify-center'}`}
+              title="Sair do Sistema"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              {isSidebarOpen && <span className="font-semibold text-sm">Sair</span>}
+            </button>
           </nav>
 
           {/* Footer */}
@@ -161,7 +187,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               {isSidebarOpen && (
                 <div>
                   <div className="text-sm font-semibold text-foreground">Admin</div>
-                  <div className="text-xs text-muted-foreground">Sistema</div>
+                  <div className="text-xs text-muted-foreground">Logado</div>
                 </div>
               )}
             </div>
@@ -176,7 +202,7 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation - Show only 5 main items */}
+      {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 h-14 bg-card border-t border-border z-50 grid grid-cols-5 safe-area-pb">
         {navItems.slice(0, 5).map((item) => {
           const isActive = location.pathname === item.path;

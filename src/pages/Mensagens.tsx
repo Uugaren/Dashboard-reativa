@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabase"; // <--- Importação
 
 interface Message {
   id: number;
@@ -34,9 +35,7 @@ const Mensagens = () => {
   useEffect(() => {
     loadMessages();
     
-    const supabase = (window as any).supabaseClient;
-    if (!supabase) return;
-
+    // Substituindo a conexão global pela importada
     const channel = supabase
       .channel('mensagens-changes')
       .on(
@@ -58,9 +57,6 @@ const Mensagens = () => {
   }, []);
 
   const loadMessages = async () => {
-    const supabase = (window as any).supabaseClient;
-    if (!supabase) return;
-
     try {
       // Buscar mensagens
       const { data: mensagensData, error: mensagensError } = await supabase
@@ -70,14 +66,13 @@ const Mensagens = () => {
 
       if (mensagensError) throw mensagensError;
 
-      // Buscar clientes para obter os nomes corretos
+      // Buscar clientes
       const { data: clientesData, error: clientesError } = await supabase
         .from('clientes')
         .select('id, nome_completo, telefone');
 
       if (clientesError) throw clientesError;
 
-      // Criar mapa de clientes para acesso rápido
       const clientesMap = (clientesData || []).reduce((acc: Record<string, { nome: string; telefone: string }>, cliente: any) => {
         acc[cliente.id] = {
           nome: cliente.nome_completo || '',
@@ -86,7 +81,6 @@ const Mensagens = () => {
         return acc;
       }, {});
 
-      // Agrupar mensagens por cliente
       const groupedByClient = (mensagensData || []).reduce((acc: Record<string, ClienteConversas>, msg: Message) => {
         const clienteId = msg.cliente_id;
         const clienteInfo = clientesMap[clienteId];
@@ -106,7 +100,6 @@ const Mensagens = () => {
         acc[clienteId].totalMensagens++;
         acc[clienteId].mensagens.push(msg);
         
-        // Atualizar última mensagem se for mais recente
         if (new Date(msg.created_at) > new Date(acc[clienteId].ultimaData)) {
           acc[clienteId].ultimaMensagem = msg.bot_message || msg.user_message || '';
           acc[clienteId].ultimaData = msg.created_at;
@@ -120,7 +113,6 @@ const Mensagens = () => {
 
       setClientesConversas(clientesArray);
       
-      // Manter seleção se cliente já estava selecionado
       if (selectedCliente) {
         const updatedCliente = clientesArray.find(c => c.clienteId === selectedCliente.clienteId);
         if (updatedCliente) {
@@ -188,12 +180,11 @@ const Mensagens = () => {
     );
   }
 
+  // O RESTANTE DO JSX É IDÊNTICO AO SEU ARQUIVO ORIGINAL
   return (
     <Layout>
       <div className="h-[calc(100vh-4rem)] md:h-screen flex">
-        {/* Lista de Conversas - Esquerda */}
         <div className="w-full md:w-96 border-r border-border bg-card flex flex-col">
-          {/* Header */}
           <div className="p-4 border-b border-border">
             <h1 className="text-2xl font-bold mb-4">
               <span className="gradient-text">Mensagens</span>
@@ -207,7 +198,6 @@ const Mensagens = () => {
             />
           </div>
 
-          {/* Lista de Clientes */}
           <ScrollArea className="flex-1">
             {filteredClientes.length === 0 ? (
               <div className="text-center py-20 px-4">
@@ -264,11 +254,9 @@ const Mensagens = () => {
           </ScrollArea>
         </div>
 
-        {/* Área de Conversa - Direita */}
         <div className="hidden md:flex flex-1 flex-col bg-background">
           {selectedCliente ? (
             <>
-              {/* Header da Conversa */}
               <div className="p-4 border-b border-border bg-card flex items-center gap-4">
                 <Avatar className="h-12 w-12 border-2 border-primary/20">
                   <AvatarFallback className="bg-gradient-to-br from-primary/20 to-accent/20 text-foreground font-semibold">
@@ -284,14 +272,12 @@ const Mensagens = () => {
                 </span>
               </div>
 
-              {/* Mensagens */}
               <ScrollArea className="flex-1 p-6">
                 <div className="space-y-4 max-w-4xl mx-auto">
                   {selectedCliente.mensagens
                     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
                     .map((message) => (
                       <div key={message.id} className="space-y-2">
-                        {/* User Message */}
                         {message.user_message && (
                           <div className="flex justify-end animate-slide-in">
                             <div className="max-w-[70%]">
@@ -307,7 +293,6 @@ const Mensagens = () => {
                           </div>
                         )}
 
-                        {/* Bot Message */}
                         {message.bot_message && (
                           <div className="flex justify-start animate-slide-in">
                             <div className="max-w-[70%]">

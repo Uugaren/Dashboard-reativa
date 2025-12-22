@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/lib/supabase"; // <--- Importação
 
 interface Indicacao {
   id: string;
@@ -30,9 +31,6 @@ const Indicacoes = () => {
   useEffect(() => {
     loadIndicacoes();
 
-    const supabase = (window as any).supabaseClient;
-    if (!supabase) return;
-
     const channel = supabase
       .channel('indicacoes-changes')
       .on(
@@ -54,9 +52,6 @@ const Indicacoes = () => {
   }, []);
 
   const loadIndicacoes = async () => {
-    const supabase = (window as any).supabaseClient;
-    if (!supabase) return;
-
     try {
       const { data, error } = await supabase
         .from('indicacoes')
@@ -65,7 +60,6 @@ const Indicacoes = () => {
 
       if (error) throw error;
 
-      // Agrupar indicações por cliente
       const groupedByClient = (data || []).reduce((acc: Record<string, ClienteIndicacoes>, indicacao: Indicacao) => {
         const clienteId = indicacao.cliente_indicador_id;
         
@@ -82,7 +76,6 @@ const Indicacoes = () => {
         acc[clienteId].totalIndicacoes++;
         acc[clienteId].indicacoes.push(indicacao);
         
-        // Atualizar última indicação se for mais recente
         if (new Date(indicacao.data_indicacao) > new Date(acc[clienteId].ultimaIndicacao)) {
           acc[clienteId].ultimaIndicacao = indicacao.data_indicacao;
         }
@@ -95,7 +88,6 @@ const Indicacoes = () => {
 
       setClientesIndicacoes(clientesArray);
       
-      // Manter seleção se cliente já estava selecionado
       if (selectedCliente) {
         const updatedCliente = clientesArray.find(c => c.clienteId === selectedCliente.clienteId);
         if (updatedCliente) {
@@ -151,12 +143,11 @@ const Indicacoes = () => {
     );
   }
 
+  // MANTIDO JSX ORIGINAL
   return (
     <Layout>
       <div className="h-[calc(100vh-4rem)] md:h-screen flex">
-        {/* Lista de Clientes - Esquerda */}
         <div className="w-full md:w-96 border-r border-border bg-card flex flex-col">
-          {/* Header */}
           <div className="p-4 border-b border-border">
             <h1 className="text-2xl font-bold mb-4">
               <span className="gradient-text">Indicações</span>
@@ -170,7 +161,6 @@ const Indicacoes = () => {
             />
           </div>
 
-          {/* Lista de Clientes */}
           <ScrollArea className="flex-1">
             {filteredClientes.length === 0 ? (
               <div className="text-center py-20 px-4">
@@ -222,11 +212,9 @@ const Indicacoes = () => {
           </ScrollArea>
         </div>
 
-        {/* Área de Indicações - Direita */}
         <div className="hidden md:flex flex-1 flex-col bg-background">
           {selectedCliente ? (
             <>
-              {/* Header */}
               <div className="p-6 border-b border-border bg-card">
                 <div className="flex items-center gap-4 mb-6">
                   <Avatar className="h-16 w-16 border-2 border-primary/20">
@@ -246,7 +234,6 @@ const Indicacoes = () => {
                 </div>
               </div>
 
-              {/* Lista de Indicações */}
               <ScrollArea className="flex-1 p-6">
                 <div className="max-w-4xl mx-auto space-y-4">
                   {selectedCliente.indicacoes
