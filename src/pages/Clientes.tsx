@@ -81,22 +81,51 @@ const Clientes = () => {
   // --- HANDLERS (CADASTRO MANUAL) ---
   const handleRegisterClient = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    
     const formData = new FormData(e.currentTarget);
+    const telefone = String(formData.get('telefone'));
+    
+    // --- VALIDAÇÃO INTELIGENTE DE TELEFONE ---
+    
+    const apenasNumeros = telefone.replace(/\D/g, '');
+
+    // 1. Verificação de comprimento com Dica Inteligente
+    if (apenasNumeros.length !== 13) {
+      if (apenasNumeros.length === 12) {
+        // Caso específico de 12 dígitos (Esqueceu o 9?)
+        toast.warning("Telefone com 12 dígitos. Se for celular, adicione o dígito '9' após o DDD (Ex: 55 11 9xxxx-xxxx).");
+      } else {
+        // Outros erros de tamanho
+        toast.error(`Telefone inválido: ${apenasNumeros.length} dígitos encontrados. É obrigatório ter 13 dígitos (55 + DDD + 9 números).`);
+      }
+      return; // Impede o cadastro
+    }
+
+    // 2. Verifica se começa com o código do Brasil (55)
+    if (!apenasNumeros.startsWith('55')) {
+      toast.error("O telefone deve começar com o código do país 55.");
+      return;
+    }
+    // -------------------------------------------------
+
+    setIsSubmitting(true);
+
     try {
       const { error } = await supabase.from('clientes').insert([{
         nome_completo: String(formData.get('nomeCompleto')),
         email: String(formData.get('email')),
-        telefone: String(formData.get('telefone')),
+        telefone: telefone, 
         endereco: String(formData.get('endereco')),
         data_aniversario: String(formData.get('dataAniversario')),
         ativo: formData.get('ativo') === 'on'
       }]);
+
       if (error) {
         if (error.message.includes('duplicate key')) throw new Error("Email já cadastrado.");
         throw error;
       }
-      toast.success("Cliente cadastrado!");
+      
+      toast.success("Cliente cadastrado com sucesso!");
       (e.target as HTMLFormElement).reset();
       fetchClientes();
     } catch (error: any) {
