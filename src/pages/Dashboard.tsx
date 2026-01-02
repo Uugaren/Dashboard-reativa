@@ -320,7 +320,7 @@ const Dashboard = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                 </div>
-                Top 10 em Volume de Compras
+                Top 10 em Número de Compras
               </h3>
               <div className="w-full h-[300px]">
                 {topPurchases.length > 0 ? (
