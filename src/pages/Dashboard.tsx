@@ -16,7 +16,7 @@ const Dashboard = () => {
   const [totalMensagens, setTotalMensagens] = useState(0);
   const [totalIndicacoes, setTotalIndicacoes] = useState(0);
   const [totalClientes, setTotalClientes] = useState(0);
-  const [clientesAtivos, setClientesAtivos] = useState(0);
+  const [totalVendas, setTotalVendas] = useState(0); // Alterado de clientesAtivos para totalVendas
 
   // Estados de Dados e Filtro
   const [allCompras, setAllCompras] = useState<any[]>([]);
@@ -44,11 +44,10 @@ const Dashboard = () => {
         .select('id, nome_completo, ativo');
        
       const total = clientesData?.length || 0;
-      const ativos = clientesData?.filter(c => c.ativo).length || 0;
+      // Removido cálculo de ativos
        
       setAllClientes(clientesData || []);
       setTotalClientes(total);
-      setClientesAtivos(ativos);
 
       // 2. Buscar TODAS as compras
       const { data: comprasData } = await supabase
@@ -57,12 +56,14 @@ const Dashboard = () => {
         .order('data_compra', { ascending: false });
 
       setAllCompras(comprasData || []);
+      
+      // Define total de vendas baseado na quantidade de registros na tabela compras
+      setTotalVendas(comprasData?.length || 0);
 
       // 3. Extrair meses disponíveis para o Select
       if (comprasData && comprasData.length > 0) {
         const uniqueMonths = [...new Set(comprasData.map((c: any) => c.data_compra.slice(0, 7)))];
         setAvailableMonths(uniqueMonths.sort().reverse()); // Meses mais recentes primeiro
-        // Não forçamos mais o setSelectedMonth aqui, ele mantém o valor inicial "all"
       }
 
       // 4. Totais Globais (Mensagens e Indicações)
@@ -233,6 +234,7 @@ const Dashboard = () => {
             </div>
           </Link>
 
+          {/* KPI Alterado: Total de Vendas */}
           <Link to="/clientes" className="block">
             <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer" style={{ animationDelay: '0.2s' }}>
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -240,12 +242,12 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-accent/20 to-accent/10 flex items-center justify-center">
                     <svg className="w-7 h-7 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                     </svg>
                   </div>
                 </div>
-                <div className="text-4xl font-bold mb-2 text-foreground">{clientesAtivos}</div>
-                <div className="text-sm font-semibold text-muted-foreground">Clientes Ativos</div>
+                <div className="text-4xl font-bold mb-2 text-foreground">{totalVendas}</div>
+                <div className="text-sm font-semibold text-muted-foreground">Total de Vendas</div>
               </div>
             </div>
           </Link>
