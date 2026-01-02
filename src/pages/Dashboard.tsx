@@ -4,9 +4,10 @@ import Layout from "@/components/Layout";
 import { supabase } from "@/lib/supabase";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { toast } from "sonner"; // Assumindo que você tenha o sonner ou use o toast padrão do seu projeto
 
 const Dashboard = () => {
-  // Estados dos Gráficos
+  // Estados dos Gráficos (Dados já processados do Backend)
   const [topSpenders, setTopSpenders] = useState<any[]>([]);
   const [topTicket, setTopTicket] = useState<any[]>([]);
   const [topPurchases, setTopPurchases] = useState<any[]>([]);
@@ -16,57 +17,33 @@ const Dashboard = () => {
   const [totalMensagens, setTotalMensagens] = useState(0);
   const [totalIndicacoes, setTotalIndicacoes] = useState(0);
   const [totalClientes, setTotalClientes] = useState(0);
-  const [totalVendas, setTotalVendas] = useState(0); // Alterado de clientesAtivos para totalVendas
+  const [totalVendas, setTotalVendas] = useState(0);
+  const [valorTotalVendas, setValorTotalVendas] = useState(0); // Novo estado opcional para mostrar R$ total
 
-  // Estados de Dados e Filtro
-  const [allCompras, setAllCompras] = useState<any[]>([]);
-  const [allClientes, setAllClientes] = useState<any[]>([]);
-  // Inicializa como "all" para mostrar todo o período por padrão
+  // Estados de Filtro
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
 
+  // 1. Carregamento Inicial (Dados que não mudam com o filtro de mês)
   useEffect(() => {
-    loadInitialData();
+    loadStaticData();
+    loadAvailableMonths();
   }, []);
 
+  // 2. Carregamento Dinâmico (Sempre que mudar o mês selecionado)
   useEffect(() => {
-    // Processa os dados sempre que o filtro ou os dados brutos mudarem
-    if (allCompras.length > 0 || allClientes.length > 0) {
-      processChartData();
-    }
-  }, [selectedMonth, allCompras, allClientes]);
+    fetchDashboardMetrics();
+  }, [selectedMonth]);
 
-  const loadInitialData = async () => {
+  const loadStaticData = async () => {
     try {
-      // 1. Métricas de Clientes
-      const { data: clientesData } = await supabase
+      // Contagem rápida usando HEAD (sem baixar dados)
+      const { count: clientesCount } = await supabase
         .from('clientes')
-        .select('id, nome_completo, ativo');
-       
-      const total = clientesData?.length || 0;
-      // Removido cálculo de ativos
-       
-      setAllClientes(clientesData || []);
-      setTotalClientes(total);
+        .select('*', { count: 'exact', head: true });
+      setTotalClientes(clientesCount || 0);
 
-      // 2. Buscar TODAS as compras
-      const { data: comprasData } = await supabase
-        .from('compras')
-        .select('cliente_id, valor, data_compra')
-        .order('data_compra', { ascending: false });
-
-      setAllCompras(comprasData || []);
-      
-      // Define total de vendas baseado na quantidade de registros na tabela compras
-      setTotalVendas(comprasData?.length || 0);
-
-      // 3. Extrair meses disponíveis para o Select
-      if (comprasData && comprasData.length > 0) {
-        const uniqueMonths = [...new Set(comprasData.map((c: any) => c.data_compra.slice(0, 7)))];
-        setAvailableMonths(uniqueMonths.sort().reverse()); // Meses mais recentes primeiro
-      }
-
-      // 4. Totais Globais (Mensagens e Indicações)
       const { count: mensagensCount } = await supabase
         .from('mensagens')
         .select('*', { count: 'exact', head: true });
@@ -78,101 +55,73 @@ const Dashboard = () => {
       setTotalIndicacoes(indicacoesCount || 0);
 
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      console.error('Erro ao carregar totais estáticos:', error);
     }
   };
 
-  const processChartData = () => {
-    let filteredCompras = allCompras;
-
-    // Se NÃO for "all", filtra pelo mês selecionado
-    if (selectedMonth !== 'all') {
-      filteredCompras = allCompras.filter(c => c.data_compra.startsWith(selectedMonth));
+  const loadAvailableMonths = async () => {
+    try {
+      // RPC para buscar meses disponíveis (muito mais leve que baixar tudo)
+      // Crie a função: CREATE FUNCTION get_available_months() RETURNS text[] ...
+      const { data, error } = await supabase.rpc('get_available_months');
+      
+      if (!error && data) {
+        setAvailableMonths(data);
+      } else {
+        // Fallback caso a RPC não exista ainda (busca leve apenas das datas)
+        const { data: dates } = await supabase
+          .from('compras')
+          .select('data_compra')
+          .order('data_compra', { ascending: false });
+          
+        if (dates) {
+          const uniqueMonths = [...new Set(dates.map((c: any) => c.data_compra.slice(0, 7)))];
+          setAvailableMonths(uniqueMonths);
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar meses:', error);
     }
+  };
 
-    // --- Processamento de Top Spenders, Ticket e Quantidade ---
-    const clienteGastos = new Map();
-    const clienteQtdCompras = new Map();
+  const fetchDashboardMetrics = async () => {
+    setLoading(true);
+    try {
+      // Chamada PRINCIPAL para buscar métricas e gráfico de evolução
+      // Espera uma RPC 'get_dashboard_metrics' que retorna { kpi_count, kpi_valor, grafico_evolucao }
+      const { data: metricsData, error: metricsError } = await supabase
+        .rpc('get_dashboard_metrics', { filtro_mes: selectedMonth });
 
-    filteredCompras.forEach((compra: any) => {
-      const atualValor = clienteGastos.get(compra.cliente_id) || 0;
-      clienteGastos.set(compra.cliente_id, atualValor + parseFloat(compra.valor || 0));
+      if (metricsError) throw metricsError;
 
-      const atualQtd = clienteQtdCompras.get(compra.cliente_id) || 0;
-      clienteQtdCompras.set(compra.cliente_id, atualQtd + 1);
-    });
-
-    const spendersWithTotal = allClientes.map(c => ({
-      nome: c.nome_completo,
-      valor: clienteGastos.get(c.id) || 0,
-      quantidade: clienteQtdCompras.get(c.id) || 0
-    })).filter(c => c.valor > 0);
-
-    setTopSpenders(spendersWithTotal.sort((a, b) => b.valor - a.valor).slice(0, 10).map(c => ({
-      nome: c.nome.split(' ')[0],
-      valor: c.valor
-    })));
-
-    setTopTicket(spendersWithTotal.map(c => ({
-      nome: c.nome.split(' ')[0],
-      valor: c.valor / c.quantidade
-    })).sort((a, b) => b.valor - a.valor).slice(0, 10));
-
-    setTopPurchases(spendersWithTotal.sort((a, b) => b.quantidade - a.quantidade).slice(0, 10).map(c => ({
-      nome: c.nome.split(' ')[0],
-      quantidade: c.quantidade
-    })));
-
-    // --- Processamento do Gráfico de Linha (Evolução) ---
-    if (selectedMonth === 'all') {
-      // MODO "TODO O PERÍODO": Agrupa por MÊS
-      const salesByMonth: Record<string, number> = {};
-       
-      filteredCompras.forEach((sale: any) => {
-        const monthKey = sale.data_compra.slice(0, 7); // YYYY-MM
-        salesByMonth[monthKey] = (salesByMonth[monthKey] || 0) + parseFloat(sale.valor || 0);
-      });
-
-      // Ordena por data e formata para "Mês/Ano"
-      const salesData = Object.entries(salesByMonth)
-        .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
-        .map(([data, valor]) => {
-          const [year, month] = data.split('-');
-          const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
-          return {
-            data: dateObj.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), // ex: jan/24
-            valor: parseFloat(Number(valor).toFixed(2))
-          };
-        });
-       
-      setSalesOverTime(salesData);
-
-    } else {
-      // MODO "MÊS ESPECÍFICO": Agrupa por DIA
-      const [year, month] = selectedMonth.split('-').map(Number);
-      const daysInMonth = new Date(year, month, 0).getDate();
-       
-      const salesByDay: Record<string, number> = {};
-       
-      // Inicializa dias zerados
-      for (let i = 1; i <= daysInMonth; i++) {
-        const dayStr = i.toString().padStart(2, '0');
-        const monthStr = month.toString().padStart(2, '0');
-        salesByDay[`${dayStr}/${monthStr}`] = 0;
+      if (metricsData) {
+        setTotalVendas(metricsData.kpi_vendas_count || 0);
+        setValorTotalVendas(metricsData.kpi_vendas_valor || 0);
+        setSalesOverTime(metricsData.grafico_evolucao || []);
       }
 
-      filteredCompras.forEach((sale: any) => {
-        const [y, m, d] = sale.data_compra.split('T')[0].split('-');
-        if (`${y}-${m}` === selectedMonth) {
-          const key = `${d}/${m}`;
-          salesByDay[key] = (salesByDay[key] || 0) + parseFloat(sale.valor || 0);
-        }
-      });
+      // Buscas paralelas para os gráficos de TOP (podem ser RPCs separadas para organização)
+      
+      // 1. Top Spenders
+      const { data: spendersData } = await supabase
+        .rpc('get_top_spenders', { filtro_mes: selectedMonth });
+      setTopSpenders(spendersData || []);
 
-      setSalesOverTime(Object.entries(salesByDay).map(([data, valor]) => ({
-        data,
-        valor: parseFloat(Number(valor).toFixed(2))
-      })));
+      // 2. Top Ticket Médio
+      const { data: ticketData } = await supabase
+        .rpc('get_top_ticket', { filtro_mes: selectedMonth });
+      setTopTicket(ticketData || []);
+
+      // 3. Top Volume de Compras
+      const { data: purchasesData } = await supabase
+        .rpc('get_top_purchases', { filtro_mes: selectedMonth });
+      setTopPurchases(purchasesData || []);
+
+    } catch (error) {
+      console.error('Erro ao carregar métricas do dashboard:', error);
+      toast.error("Erro ao atualizar dashboard. Verifique sua conexão.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -196,11 +145,12 @@ const Dashboard = () => {
             </h1>
             <p className="text-muted-foreground text-lg">
               Acompanhe os principais indicadores do seu negócio
+              {loading && <span className="ml-2 text-sm text-primary animate-pulse">(Atualizando...)</span>}
             </p>
           </div>
            
           <div className="w-full md:w-64">
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+            <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={loading}>
               <SelectTrigger className="w-full bg-background border-input">
                 <SelectValue placeholder="Selecione o período" />
               </SelectTrigger>
@@ -216,6 +166,7 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {/* Grid de KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Link to="/clientes" className="block">
             <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer relative" style={{ animationDelay: '0.1s' }}>
@@ -234,7 +185,6 @@ const Dashboard = () => {
             </div>
           </Link>
 
-          {/* KPI Alterado: Total de Vendas */}
           <Link to="/clientes" className="block">
             <div className="glass rounded-2xl p-6 hover-lift animate-slide-in group cursor-pointer" style={{ animationDelay: '0.2s' }}>
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-accent/5 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -247,7 +197,9 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="text-4xl font-bold mb-2 text-foreground">{totalVendas}</div>
-                <div className="text-sm font-semibold text-muted-foreground">Total de Vendas</div>
+                <div className="text-sm font-semibold text-muted-foreground">
+                    Vendas ({selectedMonth === 'all' ? 'Total' : 'Mês'})
+                </div>
               </div>
             </div>
           </Link>
@@ -287,8 +239,10 @@ const Dashboard = () => {
           </Link>
         </div>
 
+        {/* Charts Section */}
         <div className="mt-12 space-y-8">
-          {/* Top Spenders */}
+          
+          {/* Top Spenders Chart */}
           <div className="glass rounded-2xl p-8 animate-fade-in">
             <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
@@ -298,25 +252,33 @@ const Dashboard = () => {
               </div>
               Top 10 Clientes por Valor Total Gasto ({selectedMonth === 'all' ? 'Todo o período' : formatMonthDisplay(selectedMonth)})
             </h3>
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart data={topSpenders}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="nome" stroke="hsl(var(--muted-foreground))" />
-                <YAxis stroke="hsl(var(--muted-foreground))" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--background))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                  formatter={(value: any) => [`R$ ${value.toFixed(2)}`, 'Total Gasto']}
-                />
-                <Bar dataKey="valor" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="w-full h-[350px]">
+              {topSpenders.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topSpenders}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="nome" stroke="hsl(var(--muted-foreground))" />
+                    <YAxis stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--background))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, 'Total Gasto']}
+                    />
+                    <Bar dataKey="valor" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                 <div className="h-full flex items-center justify-center text-muted-foreground">Sem dados para este período</div>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            {/* Ticket Chart */}
             <div className="glass rounded-2xl p-8 animate-fade-in">
               <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20 flex items-center justify-center">
@@ -326,24 +288,31 @@ const Dashboard = () => {
                 </div>
                 Top 10 por Ticket Médio
               </h3>
-              <ResponsiveContainer width="100%" height={450}>
-                <BarChart data={topTicket} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
-                  <YAxis dataKey="nome" type="category" stroke="hsl(var(--muted-foreground))" width={80} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--background))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                    formatter={(value: any) => [`R$ ${value.toFixed(2)}`, 'Ticket Médio']}
-                  />
-                  <Bar dataKey="valor" fill="hsl(var(--accent))" radius={[0, 8, 8, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="w-full h-[450px]">
+                {topTicket.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={topTicket} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
+                      <YAxis dataKey="nome" type="category" stroke="hsl(var(--muted-foreground))" width={80} />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--background))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px'
+                        }}
+                        formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, 'Ticket Médio']}
+                      />
+                      <Bar dataKey="valor" fill="hsl(var(--accent))" radius={[0, 8, 8, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">Sem dados</div>
+                )}
+              </div>
             </div>
 
+            {/* Purchases Pie Chart */}
             <div className="glass rounded-2xl p-8 animate-fade-in">
               <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
@@ -351,40 +320,47 @@ const Dashboard = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                   </svg>
                 </div>
-                Top 10 em Compras
+                Top 10 em Volume de Compras
               </h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={topPurchases}
-                    dataKey="quantidade"
-                    nameKey="nome"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={100}
-                    label={(entry) => `${entry.nome}: ${entry.quantidade}`}
-                  >
-                    {topPurchases.map((entry, index) => (
-                      <Cell 
-                        key={`cell-${index}`} 
-                        fill={`hsl(${(index * 360) / topPurchases.length}, 70%, 60%)`} 
+              <div className="w-full h-[300px]">
+                {topPurchases.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={topPurchases}
+                        dataKey="quantidade"
+                        nameKey="nome"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        label={(entry) => `${entry.nome}: ${entry.quantidade}`}
+                      >
+                        {topPurchases.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${index}`} 
+                            fill={`hsl(${(index * 360) / topPurchases.length}, 70%, 60%)`} 
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          color: 'hsl(var(--foreground))'
+                        }}
+                        itemStyle={{ color: 'hsl(var(--foreground))' }}
                       />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      color: 'hsl(var(--foreground))'
-                    }}
-                    itemStyle={{ color: 'hsl(var(--foreground))' }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">Sem dados</div>
+                )}
+              </div>
             </div>
           </div>
 
+          {/* Sales Evolution Line Chart */}
           <div className="glass rounded-2xl p-8 animate-fade-in">
             <h3 className="text-2xl font-bold mb-6 flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20 flex items-center justify-center">
@@ -394,31 +370,37 @@ const Dashboard = () => {
               </div>
               Evolução de Vendas ({selectedMonth === 'all' ? 'Todo o período' : formatMonthDisplay(selectedMonth)})
             </h3>
-            <ResponsiveContainer width="100%" height={350}>
-              <LineChart data={salesOverTime}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="data" stroke="hsl(var(--muted-foreground))" />
-                <YAxis stroke="hsl(var(--muted-foreground))" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--background))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                  formatter={(value: any) => [`R$ ${value.toFixed(2)}`, 'Vendas']}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="valor" 
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={3}
-                  dot={{ fill: 'hsl(var(--primary))', r: 4 }}
-                  activeDot={{ r: 6 }}
-                  name="Total de Vendas"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="w-full h-[350px]">
+              {salesOverTime.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={salesOverTime}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" />
+                    <YAxis stroke="hsl(var(--muted-foreground))" />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--background))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '8px'
+                      }}
+                      formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, 'Vendas']}
+                    />
+                    <Legend />
+                    <Line 
+                      type="monotone" 
+                      dataKey="valor" 
+                      stroke="hsl(var(--primary))" 
+                      strokeWidth={3}
+                      dot={{ fill: 'hsl(var(--primary))', r: 4 }}
+                      activeDot={{ r: 6 }}
+                      name="Total de Vendas"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground">Sem dados de evolução</div>
+              )}
+            </div>
           </div>
         </div>
       </div>
