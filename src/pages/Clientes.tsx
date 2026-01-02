@@ -3,7 +3,7 @@ import Layout from "@/components/Layout";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
-import Papa from "papaparse"; // <--- IMPORTANTE: Usando biblioteca robusta
+import Papa from "papaparse";
 
 // Interfaces
 interface Cliente {
@@ -78,54 +78,49 @@ const Clientes = () => {
 
   const getInitials = (n: string) => n ? n.charAt(0).toUpperCase() : '?';
 
-  // --- HANDLERS (CADASTRO MANUAL) ---
+  // --- HANDLER: CADASTRO MANUAL COM VALIDAÇÃO RÍGIDA ---
   const handleRegisterClient = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     const formData = new FormData(e.currentTarget);
     const telefone = String(formData.get('telefone'));
     
-    // --- VALIDAÇÃO INTELIGENTE DE TELEFONE ---
-    
+    // 1. Remove tudo que não é número
     const apenasNumeros = telefone.replace(/\D/g, '');
 
-    // 1. Verificação de comprimento com Dica Inteligente
+    // 2. Validação de Comprimento e Dica
     if (apenasNumeros.length !== 13) {
       if (apenasNumeros.length === 12) {
-        // Caso específico de 12 dígitos (Esqueceu o 9?)
         toast.warning("Telefone com 12 dígitos. Se for celular, adicione o dígito '9' após o DDD (Ex: 55 11 9xxxx-xxxx).");
       } else {
-        // Outros erros de tamanho
         toast.error(`Telefone inválido: ${apenasNumeros.length} dígitos encontrados. É obrigatório ter 13 dígitos (55 + DDD + 9 números).`);
       }
-      return; // Impede o cadastro
+      return; 
     }
 
-    // 2. Verifica se começa com o código do Brasil (55)
+    // 3. Verifica DDI Brasil (55)
     if (!apenasNumeros.startsWith('55')) {
       toast.error("O telefone deve começar com o código do país 55.");
       return;
     }
-    // -------------------------------------------------
 
     setIsSubmitting(true);
-
     try {
       const { error } = await supabase.from('clientes').insert([{
         nome_completo: String(formData.get('nomeCompleto')),
         email: String(formData.get('email')),
-        telefone: telefone, 
+        telefone: telefone,
         endereco: String(formData.get('endereco')),
         data_aniversario: String(formData.get('dataAniversario')),
         ativo: formData.get('ativo') === 'on'
       }]);
-
+      
       if (error) {
         if (error.message.includes('duplicate key')) throw new Error("Email já cadastrado.");
         throw error;
       }
       
-      toast.success("Cliente cadastrado com sucesso!");
+      toast.success("Cliente cadastrado!");
       (e.target as HTMLFormElement).reset();
       fetchClientes();
     } catch (error: any) {
@@ -162,7 +157,7 @@ const Clientes = () => {
     }
   };
 
-  // --- IMPORTAÇÃO ROBUSTA COM PAPAPARSE ---
+  // --- HANDLER: IMPORTAÇÃO OTIMIZADA (BATCH/LOTE) ---
   const handleImport = async () => {
     const file = fileInputRef.current?.files?.[0];
     if (!file) return toast.error("Selecione um arquivo CSV");
@@ -170,7 +165,7 @@ const Clientes = () => {
     toast.loading("Lendo arquivo...");
 
     Papa.parse(file, {
-      header: true, // Usa a primeira linha como cabeçalho
+      header: true,
       skipEmptyLines: true,
       encoding: "UTF-8",
       complete: async (results) => {
@@ -178,88 +173,108 @@ const Clientes = () => {
         
         if (rows.length === 0) {
           toast.dismiss();
-          return toast.error("CSV vazio.");
+          return toast.error("O arquivo CSV parece estar vazio ou inválido.");
         }
-      
-        // 1. Preparar os dados (Normalização)
+
+        // 1. Normalização das chaves
         const normalizedRows = rows.map(row => {
           const newRow: Record<string, string> = {};
-          Object.keys(row).forEach(key => newRow[key.trim().toLowerCase()] = row[key]);
+          Object.keys(row).forEach(key => {
+            newRow[key.trim().toLowerCase()] = row[key];
+          });
           return newRow;
         });
-      
-        // Mapeamento de chaves (igual ao anterior)
+
         const firstRow = normalizedRows[0];
         const keys = Object.keys(firstRow);
+        
+        // 2. Mapeamento Inteligente
         const keyMap = {
           nome: keys.find(k => k.includes('nome')),
           email: keys.find(k => k.includes('email')),
-          tel: keys.find(k => k.includes('tele') || k.includes('cel')),
-          end: keys.find(k => k.includes('end') || k.includes('rua')),
+          tel: keys.find(k => k.includes('tele') || k.includes('cel') || k.includes('phone')),
+          end: keys.find(k => k.includes('end') || k.includes('rua') || k.includes('addr')),
           niver: keys.find(k => k.includes('aniver') || k.includes('nasc')),
           prod: keys.find(k => k.includes('prod') || k.includes('serv')),
-          valor: keys.find(k => k.includes('valor') || k.includes('preço')),
+          valor: keys.find(k => k.includes('valor') || k.includes('preço') || k.includes('price')),
           data: keys.find(k => k.includes('data') && (k.includes('compra') || k.includes('venda')))
         };
-      
+
         if (!keyMap.nome) {
           toast.dismiss();
-          return toast.error("Coluna 'Nome' não encontrada.");
+          return toast.error("Não foi possível encontrar a coluna 'Nome' no CSV.");
         }
-      
-        // 2. Construir o Array Limpo para Envio
+
+        // 3. Preparação do Payload (Lista limpa)
         const payloadBatch = normalizedRows.map((row, i) => {
-          if (!row[keyMap.nome!]) return null;
-      
-          // Tratamento de valor numérico
-          let valorNumerico = null;
-          if (keyMap.valor && row[keyMap.valor]) {
-            const valStr = row[keyMap.valor].replace(/[R$\s]/g, '').replace(',', '.');
-            valorNumerico = parseFloat(valStr);
-          }
-      
-          return {
-            nome: row[keyMap.nome!],
-            email: keyMap.email && row[keyMap.email] ? row[keyMap.email] : `no_email_${Date.now()}_${i}@sys.local`,
-            telefone: keyMap.tel ? row[keyMap.tel] : '',
-            endereco: keyMap.end ? row[keyMap.end] : '',
-            data_aniversario: keyMap.niver ? row[keyMap.niver] : null,
-            produto: keyMap.prod ? row[keyMap.prod] : null,
-            valor: valorNumerico,
-            data: keyMap.data ? row[keyMap.data] : null
-          };
-        }).filter(item => item !== null); // Remove linhas vazias
-      
-        // 3. Enviar em Lotes (Chunks) de 100 para não estourar payload HTTP
-        const BATCH_SIZE = 100;
+            if (!row[keyMap.nome!]) return null;
+
+            // Tratamento de valor monetário
+            let valorNumerico = null;
+            if (keyMap.valor && row[keyMap.valor]) {
+                const valStr = row[keyMap.valor].replace(/[R$\s]/g, '').replace(',', '.');
+                valorNumerico = parseFloat(valStr);
+            }
+
+            return {
+                nome: row[keyMap.nome!],
+                email: keyMap.email && row[keyMap.email] ? row[keyMap.email] : `no_email_${Date.now()}_${i}@sys.local`,
+                telefone: keyMap.tel ? row[keyMap.tel] : '',
+                endereco: keyMap.end ? row[keyMap.end] : '',
+                data_aniversario: keyMap.niver ? row[keyMap.niver] : null,
+                produto: keyMap.prod ? row[keyMap.prod] : null,
+                valor: valorNumerico,
+                data: keyMap.data ? row[keyMap.data] : null
+            };
+        }).filter(item => item !== null);
+
+        // 4. Envio em Lotes (Chunks)
+        const BATCH_SIZE = 100; // Envia 100 clientes por vez
         let totalProcessado = 0;
+        let errosTotais = 0;
         
-        toast.loading(`Iniciando importação de ${payloadBatch.length} registros...`);
-      
+        toast.dismiss(); // Remove o loading anterior
+        toast.loading(`Importando ${payloadBatch.length} registros em lotes...`);
+
         for (let i = 0; i < payloadBatch.length; i += BATCH_SIZE) {
-          const chunk = payloadBatch.slice(i, i + BATCH_SIZE);
-          
-          try {
-            // Uma única requisição para processar 100 itens!
-            const { error } = await supabase.rpc('importar_clientes_lote', { 
-              p_dados_json: chunk 
-            });
-      
-            if (error) throw error;
+            const chunk = payloadBatch.slice(i, i + BATCH_SIZE);
             
-            totalProcessado += chunk.length;
-            toast.message(`Processando... ${Math.min(totalProcessado, payloadBatch.length)} / ${payloadBatch.length}`);
-          } catch (err) {
-            console.error("Erro no lote", err);
-            toast.error(`Erro ao processar lote ${i/BATCH_SIZE + 1}`);
-          }
+            try {
+                // Chama a nova RPC de lote
+                const { error } = await supabase.rpc('importar_clientes_lote', { 
+                    p_dados_json: chunk 
+                });
+
+                if (error) throw error;
+                
+                totalProcessado += chunk.length;
+                // Feedback visual de progresso
+                toast.message(`Processando... ${Math.min(totalProcessado, payloadBatch.length)} / ${payloadBatch.length}`);
+                
+            } catch (err) {
+                console.error(`Erro no lote ${i}`, err);
+                errosTotais += chunk.length;
+                toast.error(`Falha ao processar um lote de ${chunk.length} itens.`);
+            }
         }
-      
+
         toast.dismiss();
-        toast.success("Importação concluída!");
+        if (errosTotais === 0) {
+            toast.success(`Importação concluída! ${totalProcessado} registros processados.`);
+        } else {
+            toast.warning(`Concluído com avisos. ${totalProcessado - errosTotais} sucessos, ${errosTotais} falhas.`);
+        }
+        
         fetchClientes();
         if (fileInputRef.current) fileInputRef.current.value = "";
+      },
+      error: (error) => {
+        toast.dismiss();
+        toast.error(`Erro ao ler CSV: ${error.message}`);
       }
+    });
+  };
+
   const handleDelete = async () => {
     if(!clienteParaDeletar) return;
     await supabase.from('clientes').delete().eq('id', clienteParaDeletar.id);
@@ -322,7 +337,7 @@ const Clientes = () => {
               <div><label className="block text-sm font-semibold mb-2">Nome Completo*</label><input name="nomeCompleto" type="text" required className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="Digite o nome completo" /></div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div><label className="block text-sm font-semibold mb-2">E-mail*</label><input name="email" type="email" required className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="email@exemplo.com" /></div>
-                <div><label className="block text-sm font-semibold mb-2">Telefone*</label><input name="telefone" type="tel" required className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="(00) 00000-0000" /></div>
+                <div><label className="block text-sm font-semibold mb-2">Telefone*</label><input name="telefone" type="tel" required className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all" placeholder="55 (00) 00000-0000" /></div>
               </div>
               <div><label className="block text-sm font-semibold mb-2">Endereço</label><input name="endereco" type="text" className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all" /></div>
               <div><label className="block text-sm font-semibold mb-2">Data de Aniversário</label><input name="dataAniversario" type="date" className="w-full px-4 py-3 bg-input border border-border rounded-xl focus:ring-2 focus:ring-primary focus:border-transparent transition-all" /></div>
