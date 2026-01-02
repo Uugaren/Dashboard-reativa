@@ -6,39 +6,39 @@ import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Dashboard = () => {
-  // Estados dos Gráficos (Processados)
+  // Estados dos Gráficos
   const [topSpenders, setTopSpenders] = useState<any[]>([]);
   const [topTicket, setTopTicket] = useState<any[]>([]);
   const [topPurchases, setTopPurchases] = useState<any[]>([]);
   const [salesOverTime, setSalesOverTime] = useState<any[]>([]);
   
-  // Estados dos KPIs (Cards superiores)
+  // Estados dos KPIs
   const [totalMensagens, setTotalMensagens] = useState(0);
   const [totalIndicacoes, setTotalIndicacoes] = useState(0);
   const [totalClientes, setTotalClientes] = useState(0);
   const [clientesAtivos, setClientesAtivos] = useState(0);
 
-  // Novos Estados para Controle de Dados e Filtro
+  // Estados de Dados e Filtro
   const [allCompras, setAllCompras] = useState<any[]>([]);
   const [allClientes, setAllClientes] = useState<any[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  // Inicializa como "all" para mostrar todo o período por padrão
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
 
-  // 1. Carrega os dados brutos ao montar o componente
   useEffect(() => {
     loadInitialData();
   }, []);
 
-  // 2. Recalcula os gráficos sempre que o mês selecionado ou os dados mudarem
   useEffect(() => {
-    if (selectedMonth && allCompras.length > 0) {
+    // Processa os dados sempre que o filtro ou os dados brutos mudarem
+    if (allCompras.length > 0 || allClientes.length > 0) {
       processChartData();
     }
   }, [selectedMonth, allCompras, allClientes]);
 
   const loadInitialData = async () => {
     try {
-      // Buscando métricas gerais de Clientes
+      // 1. Métricas de Clientes
       const { data: clientesData } = await supabase
         .from('clientes')
         .select('id, nome_completo, ativo');
@@ -50,7 +50,7 @@ const Dashboard = () => {
       setTotalClientes(total);
       setClientesAtivos(ativos);
 
-      // Buscando TODAS as compras para permitir filtragem local
+      // 2. Buscar TODAS as compras
       const { data: comprasData } = await supabase
         .from('compras')
         .select('cliente_id, valor, data_compra')
@@ -58,21 +58,14 @@ const Dashboard = () => {
 
       setAllCompras(comprasData || []);
 
-      // Extrair meses disponíveis para o filtro
+      // 3. Extrair meses disponíveis para o Select
       if (comprasData && comprasData.length > 0) {
         const uniqueMonths = [...new Set(comprasData.map((c: any) => c.data_compra.slice(0, 7)))];
-        setAvailableMonths(uniqueMonths);
-        
-        // Seleciona o mês atual ou o mais recente disponível
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        if (uniqueMonths.includes(currentMonth)) {
-          setSelectedMonth(currentMonth);
-        } else {
-          setSelectedMonth(uniqueMonths[0]);
-        }
+        setAvailableMonths(uniqueMonths.sort().reverse()); // Meses mais recentes primeiro
+        // Não forçamos mais o setSelectedMonth aqui, ele mantém o valor inicial "all"
       }
 
-      // Totais de Mensagens e Indicações (KPIs Globais)
+      // 4. Totais Globais (Mensagens e Indicações)
       const { count: mensagensCount } = await supabase
         .from('mensagens')
         .select('*', { count: 'exact', head: true });
@@ -89,10 +82,14 @@ const Dashboard = () => {
   };
 
   const processChartData = () => {
-    // Filtra as compras pelo mês selecionado
-    const filteredCompras = allCompras.filter(c => c.data_compra.startsWith(selectedMonth));
+    let filteredCompras = allCompras;
 
-    // Processamento dos Top Spenders e Ticket Médio baseado nos dados filtrados
+    // Se NÃO for "all", filtra pelo mês selecionado
+    if (selectedMonth !== 'all') {
+      filteredCompras = allCompras.filter(c => c.data_compra.startsWith(selectedMonth));
+    }
+
+    // --- Processamento de Top Spenders, Ticket e Quantidade ---
     const clienteGastos = new Map();
     const clienteQtdCompras = new Map();
 
@@ -104,66 +101,85 @@ const Dashboard = () => {
       clienteQtdCompras.set(compra.cliente_id, atualQtd + 1);
     });
 
-    // Mapear IDs para Nomes usando a lista de todos os clientes
     const spendersWithTotal = allClientes.map(c => ({
       nome: c.nome_completo,
       valor: clienteGastos.get(c.id) || 0,
       quantidade: clienteQtdCompras.get(c.id) || 0
     })).filter(c => c.valor > 0);
 
-    // Atualiza Top 10 Valor
     setTopSpenders(spendersWithTotal.sort((a, b) => b.valor - a.valor).slice(0, 10).map(c => ({
       nome: c.nome.split(' ')[0],
       valor: c.valor
     })));
 
-    // Atualiza Top 10 Ticket Médio
     setTopTicket(spendersWithTotal.map(c => ({
       nome: c.nome.split(' ')[0],
       valor: c.valor / c.quantidade
     })).sort((a, b) => b.valor - a.valor).slice(0, 10));
 
-    // Atualiza Top 10 Quantidade
     setTopPurchases(spendersWithTotal.sort((a, b) => b.quantidade - a.quantidade).slice(0, 10).map(c => ({
       nome: c.nome.split(' ')[0],
       quantidade: c.quantidade
     })));
 
-    // Atualiza Vendas ao longo do tempo (Dias do mês selecionado)
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate(); // Pega o último dia do mês
-    
-    const salesByDay: Record<string, number> = {};
-    
-    // Inicializa todos os dias do mês com 0
-    for (let i = 1; i <= daysInMonth; i++) {
-      const dayStr = i.toString().padStart(2, '0');
-      const monthStr = month.toString().padStart(2, '0');
-      salesByDay[`${dayStr}/${monthStr}`] = 0;
-    }
+    // --- Processamento do Gráfico de Linha (Evolução) ---
+    if (selectedMonth === 'all') {
+      // MODO "TODO O PERÍODO": Agrupa por MÊS
+      const salesByMonth: Record<string, number> = {};
+      
+      filteredCompras.forEach((sale: any) => {
+        const monthKey = sale.data_compra.slice(0, 7); // YYYY-MM
+        salesByMonth[monthKey] = (salesByMonth[monthKey] || 0) + parseFloat(sale.valor || 0);
+      });
 
-    filteredCompras.forEach((sale: any) => {
-      const [y, m, d] = sale.data_compra.split('T')[0].split('-');
-      // Garante que a data é do mês selecionado (redundante pelo filter acima, mas seguro)
-      if (`${y}-${m}` === selectedMonth) {
-        const key = `${d}/${m}`;
-        salesByDay[key] = (salesByDay[key] || 0) + parseFloat(sale.valor || 0);
+      // Ordena por data e formata para "Mês/Ano"
+      const salesData = Object.entries(salesByMonth)
+        .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+        .map(([data, valor]) => {
+          const [year, month] = data.split('-');
+          const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+          return {
+            data: dateObj.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }), // ex: jan/24
+            valor: parseFloat(Number(valor).toFixed(2))
+          };
+        });
+      
+      setSalesOverTime(salesData);
+
+    } else {
+      // MODO "MÊS ESPECÍFICO": Agrupa por DIA
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const daysInMonth = new Date(year, month, 0).getDate();
+      
+      const salesByDay: Record<string, number> = {};
+      
+      // Inicializa dias zerados
+      for (let i = 1; i <= daysInMonth; i++) {
+        const dayStr = i.toString().padStart(2, '0');
+        const monthStr = month.toString().padStart(2, '0');
+        salesByDay[`${dayStr}/${monthStr}`] = 0;
       }
-    });
 
-    setSalesOverTime(Object.entries(salesByDay).map(([data, valor]) => ({
-      data,
-      valor: parseFloat(Number(valor).toFixed(2))
-    }))); // A ordem das chaves já deve estar correta se inserimos sequencialmente, ou podemos ordenar
+      filteredCompras.forEach((sale: any) => {
+        const [y, m, d] = sale.data_compra.split('T')[0].split('-');
+        if (`${y}-${m}` === selectedMonth) {
+          const key = `${d}/${m}`;
+          salesByDay[key] = (salesByDay[key] || 0) + parseFloat(sale.valor || 0);
+        }
+      });
+
+      setSalesOverTime(Object.entries(salesByDay).map(([data, valor]) => ({
+        data,
+        valor: parseFloat(Number(valor).toFixed(2))
+      })));
+    }
   };
 
-  // Helper para formatar o nome do mês
   const formatMonthDisplay = (yyyyMm: string) => {
+    if (yyyyMm === 'all') return "Todo o período";
     if (!yyyyMm) return "";
     const [year, month] = yyyyMm.split('-');
     const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-    // Ajuste para garantir que o mês seja exibido corretamente independente do fuso horário
-    // Usamos UTC ou definimos o dia como 2 para evitar problemas de "dia anterior"
     return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   };
 
@@ -172,7 +188,6 @@ const Dashboard = () => {
       <div id="alertContainer" className="fixed top-4 right-4 z-50 max-w-md w-full"></div>
       
       <div className="container mx-auto px-6 py-12">
-        {/* Cabeçalho com Filtro */}
         <div className="mb-12 animate-fade-in flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
             <h1 className="text-4xl font-bold mb-3">
@@ -183,13 +198,13 @@ const Dashboard = () => {
             </p>
           </div>
           
-          {/* Seletor de Mês */}
           <div className="w-full md:w-64">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-full bg-background border-input">
                 <SelectValue placeholder="Selecione o período" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all">Todo o período</SelectItem>
                 {availableMonths.map((month) => (
                   <SelectItem key={month} value={month} className="capitalize">
                     {formatMonthDisplay(month)}
@@ -279,7 +294,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              Top 10 Clientes por Valor Total Gasto ({formatMonthDisplay(selectedMonth)})
+              Top 10 Clientes por Valor Total Gasto ({selectedMonth === 'all' ? 'Todo o período' : formatMonthDisplay(selectedMonth)})
             </h3>
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={topSpenders}>
@@ -375,7 +390,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                 </svg>
               </div>
-              Evolução de Vendas ({formatMonthDisplay(selectedMonth)})
+              Evolução de Vendas ({selectedMonth === 'all' ? 'Todo o período' : formatMonthDisplay(selectedMonth)})
             </h3>
             <ResponsiveContainer width="100%" height={350}>
               <LineChart data={salesOverTime}>
