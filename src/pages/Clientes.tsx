@@ -178,87 +178,88 @@ const Clientes = () => {
         
         if (rows.length === 0) {
           toast.dismiss();
-          return toast.error("O arquivo CSV parece estar vazio ou inválido.");
+          return toast.error("CSV vazio.");
         }
-
-        // Normalização das chaves do cabeçalho (lowercase, trim) para facilitar o match
+      
+        // 1. Preparar os dados (Normalização)
         const normalizedRows = rows.map(row => {
           const newRow: Record<string, string> = {};
-          Object.keys(row).forEach(key => {
-            newRow[key.trim().toLowerCase()] = row[key];
-          });
+          Object.keys(row).forEach(key => newRow[key.trim().toLowerCase()] = row[key]);
           return newRow;
         });
-
-        // Tenta encontrar as chaves corretas baseadas em palavras-chave
+      
+        // Mapeamento de chaves (igual ao anterior)
         const firstRow = normalizedRows[0];
         const keys = Object.keys(firstRow);
-        
         const keyMap = {
           nome: keys.find(k => k.includes('nome')),
           email: keys.find(k => k.includes('email')),
-          tel: keys.find(k => k.includes('tele') || k.includes('cel') || k.includes('phone')),
-          end: keys.find(k => k.includes('end') || k.includes('rua') || k.includes('addr')),
+          tel: keys.find(k => k.includes('tele') || k.includes('cel')),
+          end: keys.find(k => k.includes('end') || k.includes('rua')),
           niver: keys.find(k => k.includes('aniver') || k.includes('nasc')),
           prod: keys.find(k => k.includes('prod') || k.includes('serv')),
-          valor: keys.find(k => k.includes('valor') || k.includes('preço') || k.includes('price')),
+          valor: keys.find(k => k.includes('valor') || k.includes('preço')),
           data: keys.find(k => k.includes('data') && (k.includes('compra') || k.includes('venda')))
         };
-
+      
         if (!keyMap.nome) {
           toast.dismiss();
-          return toast.error("Não foi possível encontrar a coluna 'Nome' no CSV.");
+          return toast.error("Coluna 'Nome' não encontrada.");
         }
-
-        toast.loading(`Importando ${normalizedRows.length} registros...`);
-        let sucessos = 0;
-
-        for (let i = 0; i < normalizedRows.length; i++) {
-          const row = normalizedRows[i];
-          
-          // Tratamento de valores
-          const nome = row[keyMap.nome!];
-          if (!nome) continue; // Pula se não tiver nome
-
-          // Email: se não tiver, gera um fake único para não quebrar a constraint
-          const email = keyMap.email && row[keyMap.email] ? row[keyMap.email] : `no_email_${Date.now()}_${i}@sys.local`;
-          
-          // Valor: trata R$ e vírgulas
+      
+        // 2. Construir o Array Limpo para Envio
+        const payloadBatch = normalizedRows.map((row, i) => {
+          if (!row[keyMap.nome!]) return null;
+      
+          // Tratamento de valor numérico
           let valorNumerico = null;
           if (keyMap.valor && row[keyMap.valor]) {
             const valStr = row[keyMap.valor].replace(/[R$\s]/g, '').replace(',', '.');
             valorNumerico = parseFloat(valStr);
           }
-
+      
+          return {
+            nome: row[keyMap.nome!],
+            email: keyMap.email && row[keyMap.email] ? row[keyMap.email] : `no_email_${Date.now()}_${i}@sys.local`,
+            telefone: keyMap.tel ? row[keyMap.tel] : '',
+            endereco: keyMap.end ? row[keyMap.end] : '',
+            data_aniversario: keyMap.niver ? row[keyMap.niver] : null,
+            produto: keyMap.prod ? row[keyMap.prod] : null,
+            valor: valorNumerico,
+            data: keyMap.data ? row[keyMap.data] : null
+          };
+        }).filter(item => item !== null); // Remove linhas vazias
+      
+        // 3. Enviar em Lotes (Chunks) de 100 para não estourar payload HTTP
+        const BATCH_SIZE = 100;
+        let totalProcessado = 0;
+        
+        toast.loading(`Iniciando importação de ${payloadBatch.length} registros...`);
+      
+        for (let i = 0; i < payloadBatch.length; i += BATCH_SIZE) {
+          const chunk = payloadBatch.slice(i, i + BATCH_SIZE);
+          
           try {
-            await supabase.rpc('importar_cliente_compra', {
-              p_nome_completo: nome,
-              p_email: email,
-              p_telefone: keyMap.tel ? row[keyMap.tel] : '',
-              p_endereco: keyMap.end ? row[keyMap.end] : '',
-              p_data_aniversario: keyMap.niver ? row[keyMap.niver] : null,
-              p_produto_servico: keyMap.prod ? row[keyMap.prod] : null,
-              p_valor_compra: valorNumerico || null,
-              p_data_compra: keyMap.data ? row[keyMap.data] : null
+            // Uma única requisição para processar 100 itens!
+            const { error } = await supabase.rpc('importar_clientes_lote', { 
+              p_dados_json: chunk 
             });
-            sucessos++;
+      
+            if (error) throw error;
+            
+            totalProcessado += chunk.length;
+            toast.message(`Processando... ${Math.min(totalProcessado, payloadBatch.length)} / ${payloadBatch.length}`);
           } catch (err) {
-            console.error(`Erro na linha ${i + 2}`, err);
+            console.error("Erro no lote", err);
+            toast.error(`Erro ao processar lote ${i/BATCH_SIZE + 1}`);
           }
         }
-
+      
         toast.dismiss();
-        toast.success(`${sucessos} registros importados com sucesso!`);
+        toast.success("Importação concluída!");
         fetchClientes();
         if (fileInputRef.current) fileInputRef.current.value = "";
-      },
-      error: (error) => {
-        toast.dismiss();
-        toast.error(`Erro ao ler CSV: ${error.message}`);
       }
-    });
-  };
-
   const handleDelete = async () => {
     if(!clienteParaDeletar) return;
     await supabase.from('clientes').delete().eq('id', clienteParaDeletar.id);
