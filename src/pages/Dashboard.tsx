@@ -1,28 +1,44 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import Layout from "@/components/Layout";
-import { supabase } from "@/lib/supabase"; // <--- Conexão corrigida
+import { supabase } from "@/lib/supabase";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const Dashboard = () => {
+  // Estados dos Gráficos (Processados)
   const [topSpenders, setTopSpenders] = useState<any[]>([]);
   const [topTicket, setTopTicket] = useState<any[]>([]);
   const [topPurchases, setTopPurchases] = useState<any[]>([]);
   const [salesOverTime, setSalesOverTime] = useState<any[]>([]);
+  
+  // Estados dos KPIs (Cards superiores)
   const [totalMensagens, setTotalMensagens] = useState(0);
   const [totalIndicacoes, setTotalIndicacoes] = useState(0);
   const [totalClientes, setTotalClientes] = useState(0);
   const [clientesAtivos, setClientesAtivos] = useState(0);
 
+  // Novos Estados para Controle de Dados e Filtro
+  const [allCompras, setAllCompras] = useState<any[]>([]);
+  const [allClientes, setAllClientes] = useState<any[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+
+  // 1. Carrega os dados brutos ao montar o componente
   useEffect(() => {
-    loadChartData();
+    loadInitialData();
   }, []);
 
-  const loadChartData = async () => {
-    // Não usamos mais (window as any).supabaseClient
-    
+  // 2. Recalcula os gráficos sempre que o mês selecionado ou os dados mudarem
+  useEffect(() => {
+    if (selectedMonth && allCompras.length > 0) {
+      processChartData();
+    }
+  }, [selectedMonth, allCompras, allClientes]);
+
+  const loadInitialData = async () => {
     try {
-      // 1. Buscando métricas gerais de Clientes
+      // Buscando métricas gerais de Clientes
       const { data: clientesData } = await supabase
         .from('clientes')
         .select('id, nome_completo, ativo');
@@ -30,69 +46,33 @@ const Dashboard = () => {
       const total = clientesData?.length || 0;
       const ativos = clientesData?.filter(c => c.ativo).length || 0;
       
+      setAllClientes(clientesData || []);
       setTotalClientes(total);
       setClientesAtivos(ativos);
 
-      // 2. Buscando dados de Compras para gráficos
+      // Buscando TODAS as compras para permitir filtragem local
       const { data: comprasData } = await supabase
         .from('compras')
-        .select('cliente_id, valor, data_compra');
+        .select('cliente_id, valor, data_compra')
+        .order('data_compra', { ascending: false });
 
-      // Processamento dos Top Spenders e Ticket Médio
-      const clienteGastos = new Map();
-      const clienteQtdCompras = new Map();
+      setAllCompras(comprasData || []);
 
-      comprasData?.forEach((compra: any) => {
-        const atualValor = clienteGastos.get(compra.cliente_id) || 0;
-        clienteGastos.set(compra.cliente_id, atualValor + parseFloat(compra.valor || 0));
+      // Extrair meses disponíveis para o filtro
+      if (comprasData && comprasData.length > 0) {
+        const uniqueMonths = [...new Set(comprasData.map((c: any) => c.data_compra.slice(0, 7)))];
+        setAvailableMonths(uniqueMonths);
+        
+        // Seleciona o mês atual ou o mais recente disponível
+        const currentMonth = new Date().toISOString().slice(0, 7);
+        if (uniqueMonths.includes(currentMonth)) {
+          setSelectedMonth(currentMonth);
+        } else {
+          setSelectedMonth(uniqueMonths[0]);
+        }
+      }
 
-        const atualQtd = clienteQtdCompras.get(compra.cliente_id) || 0;
-        clienteQtdCompras.set(compra.cliente_id, atualQtd + 1);
-      });
-
-      // Mapear IDs para Nomes
-      const spendersWithTotal = clientesData?.map(c => ({
-        nome: c.nome_completo,
-        valor: clienteGastos.get(c.id) || 0,
-        quantidade: clienteQtdCompras.get(c.id) || 0
-      })).filter(c => c.valor > 0);
-
-      // Top 10 Valor
-      setTopSpenders(spendersWithTotal?.sort((a, b) => b.valor - a.valor).slice(0, 10).map(c => ({
-        nome: c.nome.split(' ')[0],
-        valor: c.valor
-      })) || []);
-
-      // Top 10 Ticket Médio
-      setTopTicket(spendersWithTotal?.map(c => ({
-        nome: c.nome.split(' ')[0],
-        valor: c.valor / c.quantidade
-      })).sort((a, b) => b.valor - a.valor).slice(0, 10) || []);
-
-      // Top 10 Quantidade
-      setTopPurchases(spendersWithTotal?.sort((a, b) => b.quantidade - a.quantidade).slice(0, 10).map(c => ({
-        nome: c.nome.split(' ')[0],
-        quantidade: c.quantidade
-      })) || []);
-
-      // Vendas ao longo do tempo (30 dias)
-      const trintaDiasAtras = new Date();
-      trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30);
-      
-      const vendasRecentes = comprasData?.filter((c: any) => new Date(c.data_compra) >= trintaDiasAtras) || [];
-      
-      const salesByDay: Record<string, number> = {};
-      vendasRecentes.forEach((sale: any) => {
-        const date = new Date(sale.data_compra + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        salesByDay[date] = (salesByDay[date] || 0) + parseFloat(sale.valor || 0);
-      });
-
-      setSalesOverTime(Object.entries(salesByDay).map(([data, valor]) => ({
-        data,
-        valor: parseFloat(Number(valor).toFixed(2))
-      })));
-
-      // Totais de Mensagens e Indicações
+      // Totais de Mensagens e Indicações (KPIs Globais)
       const { count: mensagensCount } = await supabase
         .from('mensagens')
         .select('*', { count: 'exact', head: true });
@@ -108,18 +88,116 @@ const Dashboard = () => {
     }
   };
 
+  const processChartData = () => {
+    // Filtra as compras pelo mês selecionado
+    const filteredCompras = allCompras.filter(c => c.data_compra.startsWith(selectedMonth));
+
+    // Processamento dos Top Spenders e Ticket Médio baseado nos dados filtrados
+    const clienteGastos = new Map();
+    const clienteQtdCompras = new Map();
+
+    filteredCompras.forEach((compra: any) => {
+      const atualValor = clienteGastos.get(compra.cliente_id) || 0;
+      clienteGastos.set(compra.cliente_id, atualValor + parseFloat(compra.valor || 0));
+
+      const atualQtd = clienteQtdCompras.get(compra.cliente_id) || 0;
+      clienteQtdCompras.set(compra.cliente_id, atualQtd + 1);
+    });
+
+    // Mapear IDs para Nomes usando a lista de todos os clientes
+    const spendersWithTotal = allClientes.map(c => ({
+      nome: c.nome_completo,
+      valor: clienteGastos.get(c.id) || 0,
+      quantidade: clienteQtdCompras.get(c.id) || 0
+    })).filter(c => c.valor > 0);
+
+    // Atualiza Top 10 Valor
+    setTopSpenders(spendersWithTotal.sort((a, b) => b.valor - a.valor).slice(0, 10).map(c => ({
+      nome: c.nome.split(' ')[0],
+      valor: c.valor
+    })));
+
+    // Atualiza Top 10 Ticket Médio
+    setTopTicket(spendersWithTotal.map(c => ({
+      nome: c.nome.split(' ')[0],
+      valor: c.valor / c.quantidade
+    })).sort((a, b) => b.valor - a.valor).slice(0, 10));
+
+    // Atualiza Top 10 Quantidade
+    setTopPurchases(spendersWithTotal.sort((a, b) => b.quantidade - a.quantidade).slice(0, 10).map(c => ({
+      nome: c.nome.split(' ')[0],
+      quantidade: c.quantidade
+    })));
+
+    // Atualiza Vendas ao longo do tempo (Dias do mês selecionado)
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate(); // Pega o último dia do mês
+    
+    const salesByDay: Record<string, number> = {};
+    
+    // Inicializa todos os dias do mês com 0
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dayStr = i.toString().padStart(2, '0');
+      const monthStr = month.toString().padStart(2, '0');
+      salesByDay[`${dayStr}/${monthStr}`] = 0;
+    }
+
+    filteredCompras.forEach((sale: any) => {
+      const [y, m, d] = sale.data_compra.split('T')[0].split('-');
+      // Garante que a data é do mês selecionado (redundante pelo filter acima, mas seguro)
+      if (`${y}-${m}` === selectedMonth) {
+        const key = `${d}/${m}`;
+        salesByDay[key] = (salesByDay[key] || 0) + parseFloat(sale.valor || 0);
+      }
+    });
+
+    setSalesOverTime(Object.entries(salesByDay).map(([data, valor]) => ({
+      data,
+      valor: parseFloat(Number(valor).toFixed(2))
+    }))); // A ordem das chaves já deve estar correta se inserimos sequencialmente, ou podemos ordenar
+  };
+
+  // Helper para formatar o nome do mês
+  const formatMonthDisplay = (yyyyMm: string) => {
+    if (!yyyyMm) return "";
+    const [year, month] = yyyyMm.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    // Ajuste para garantir que o mês seja exibido corretamente independente do fuso horário
+    // Usamos UTC ou definimos o dia como 2 para evitar problemas de "dia anterior"
+    return date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  };
+
   return (
     <Layout>
       <div id="alertContainer" className="fixed top-4 right-4 z-50 max-w-md w-full"></div>
       
       <div className="container mx-auto px-6 py-12">
-        <div className="mb-12 animate-fade-in">
-          <h1 className="text-4xl font-bold mb-3">
-            <span className="gradient-text">Dashboard</span> de Métricas
-          </h1>
-          <p className="text-muted-foreground text-lg">
-            Acompanhe os principais indicadores do seu negócio
-          </p>
+        {/* Cabeçalho com Filtro */}
+        <div className="mb-12 animate-fade-in flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+          <div>
+            <h1 className="text-4xl font-bold mb-3">
+              <span className="gradient-text">Dashboard</span> de Métricas
+            </h1>
+            <p className="text-muted-foreground text-lg">
+              Acompanhe os principais indicadores do seu negócio
+            </p>
+          </div>
+          
+          {/* Seletor de Mês */}
+          <div className="w-full md:w-64">
+            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <SelectTrigger className="w-full bg-background border-input">
+                <SelectValue placeholder="Selecione o período" />
+              </SelectTrigger>
+              <SelectContent>
+                {availableMonths.map((month) => (
+                  <SelectItem key={month} value={month} className="capitalize">
+                    {formatMonthDisplay(month)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -201,7 +279,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              Top 10 Clientes por Valor Total Gasto
+              Top 10 Clientes por Valor Total Gasto ({formatMonthDisplay(selectedMonth)})
             </h3>
             <ResponsiveContainer width="100%" height={350}>
               <BarChart data={topSpenders}>
@@ -297,7 +375,7 @@ const Dashboard = () => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                 </svg>
               </div>
-              Evolução de Vendas (Últimos 30 dias)
+              Evolução de Vendas ({formatMonthDisplay(selectedMonth)})
             </h3>
             <ResponsiveContainer width="100%" height={350}>
               <LineChart data={salesOverTime}>
