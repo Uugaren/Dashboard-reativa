@@ -11,7 +11,7 @@ const Dashboard = () => {
   const [topTicket, setTopTicket] = useState<any[]>([]);
   const [topPurchases, setTopPurchases] = useState<any[]>([]);
   const [salesOverTime, setSalesOverTime] = useState<any[]>([]);
-  
+   
   // Estados dos KPIs
   const [totalMensagens, setTotalMensagens] = useState(0);
   const [totalIndicacoes, setTotalIndicacoes] = useState(0);
@@ -42,10 +42,10 @@ const Dashboard = () => {
       const { data: clientesData } = await supabase
         .from('clientes')
         .select('id, nome_completo, ativo');
-      
+       
       const total = clientesData?.length || 0;
       const ativos = clientesData?.filter(c => c.ativo).length || 0;
-      
+       
       setAllClientes(clientesData || []);
       setTotalClientes(total);
       setClientesAtivos(ativos);
@@ -126,7 +126,7 @@ const Dashboard = () => {
     if (selectedMonth === 'all') {
       // MODO "TODO O PERÍODO": Agrupa por MÊS
       const salesByMonth: Record<string, number> = {};
-      
+       
       filteredCompras.forEach((sale: any) => {
         const monthKey = sale.data_compra.slice(0, 7); // YYYY-MM
         salesByMonth[monthKey] = (salesByMonth[monthKey] || 0) + parseFloat(sale.valor || 0);
@@ -143,16 +143,16 @@ const Dashboard = () => {
             valor: parseFloat(Number(valor).toFixed(2))
           };
         });
-      
+       
       setSalesOverTime(salesData);
 
     } else {
       // MODO "MÊS ESPECÍFICO": Agrupa por DIA
       const [year, month] = selectedMonth.split('-').map(Number);
       const daysInMonth = new Date(year, month, 0).getDate();
-      
+       
       const salesByDay: Record<string, number> = {};
-      
+       
       // Inicializa dias zerados
       for (let i = 1; i <= daysInMonth; i++) {
         const dayStr = i.toString().padStart(2, '0');
@@ -186,7 +186,7 @@ const Dashboard = () => {
   return (
     <Layout>
       <div id="alertContainer" className="fixed top-4 right-4 z-50 max-w-md w-full"></div>
-      
+       
       <div className="container mx-auto px-6 py-12">
         <div className="mb-12 animate-fade-in flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
           <div>
@@ -197,7 +197,7 @@ const Dashboard = () => {
               Acompanhe os principais indicadores do seu negócio
             </p>
           </div>
-          
+           
           <div className="w-full md:w-64">
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="w-full bg-background border-input">
